@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from edge_agent.config import settings
 from edge_agent.detection_process import detection_manager
@@ -16,6 +17,13 @@ from edge_agent.schemas import (
 from edge_agent.state import edge_state
 
 app = FastAPI(title="ErgoQuipt Edge Agent", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -89,4 +97,3 @@ def stop_detection() -> DetectionStatusResponse:
 def detection_status() -> DetectionStatusResponse:
     status = detection_manager.status()
     return DetectionStatusResponse(**status.__dict__)
-
