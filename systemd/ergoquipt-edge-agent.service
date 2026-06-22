@@ -1,0 +1,17 @@
+[Unit]
+Description=ErgoQuipt lightweight edge agent
+After=network-online.target hailort.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/RULA-REBA_Detection_HailoAI
+EnvironmentFile=-/home/admin/RULA-REBA_Detection_HailoAI/.env
+ExecStart=/home/admin/RULA-REBA_Detection_HailoAI/.venv/bin/uvicorn edge_agent.app:app --host 0.0.0.0 --port 8765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
