@@ -4,6 +4,7 @@ import os
 import time
 from urllib.parse import urlparse
 
+import httpx
 import websockets
 
 
@@ -20,6 +21,22 @@ def fake_keypoints(frame_id: int) -> list[dict]:
         {"id": index, "name": f"kp_{index}", "x": 260 + index * 8 + offset, "y": 140 + index * 6, "score": 0.82}
         for index in range(17)
     ]
+
+
+def fake_overlay(frame_id: int) -> dict:
+    offset = (frame_id % 30) - 15
+    return {
+        "width": 640,
+        "height": 360,
+        "detections": [
+            {
+                "worker_id": "demo-worker-1",
+                "tracking_id": 1,
+                "bbox": [220 + offset, 70, 180, 270],
+                "keypoints": {"format": "coco17", "points": fake_keypoints(frame_id)},
+            }
+        ],
+    }
 
 
 def fake_event(session_id: str, cam_id: str, frame_id: int) -> dict:
@@ -52,16 +69,21 @@ async def stream_events() -> None:
     session_id = os.getenv("EDGE_SESSION_ID", "SESSION_UNKNOWN")
     cam_id = os.getenv("EDGE_CAM_ID", "CAM_01")
     backend_url = os.getenv("EDGE_BACKEND_URL", "http://127.0.0.1:8000")
+    overlay_url = os.getenv("EDGE_OVERLAY_URL", "http://127.0.0.1:8765/overlay/latest")
     url = websocket_url(backend_url, cam_id)
     frame_id = 0
 
     while True:
         try:
-            async with websockets.connect(url) as websocket:
+            async with websockets.connect(url) as websocket, httpx.AsyncClient(timeout=1) as client:
                 print(f"fake detection connected to {url} for {session_id} on {cam_id}", flush=True)
                 while True:
                     frame_id += 1
                     await websocket.send(json.dumps(fake_event(session_id, cam_id, frame_id)))
+                    try:
+                        await client.post(overlay_url, json=fake_overlay(frame_id))
+                    except httpx.HTTPError as exc:
+                        print(f"fake overlay update failed: {exc}", flush=True)
                     await asyncio.sleep(1)
         except Exception as exc:
             print(f"fake detection reconnecting after error: {exc}", flush=True)
