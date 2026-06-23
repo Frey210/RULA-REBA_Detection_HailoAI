@@ -15,26 +15,51 @@ def websocket_url(backend_url: str, cam_id: str) -> str:
     return f"{scheme}://{netloc}/ws/v1/edge/{cam_id}"
 
 
-def fake_keypoints(frame_id: int) -> list[dict]:
+def fake_keypoints(frame_id: int, base_x: int, base_y: int) -> list[dict]:
     offset = (frame_id % 30) - 15
     return [
-        {"id": index, "name": f"kp_{index}", "x": 260 + index * 8 + offset, "y": 140 + index * 6, "score": 0.82}
+        {"id": index, "name": f"kp_{index}", "x": base_x + index * 5 + offset, "y": base_y + index * 5, "score": 0.82}
         for index in range(17)
     ]
 
 
-def fake_overlay(frame_id: int) -> dict:
+def fake_detections(frame_id: int) -> list[dict]:
     offset = (frame_id % 30) - 15
+    workers = [
+        ("worker-a", 1, 165 + offset, 72, 145, 265, 0.91, 0.87, 4, 5, "medium"),
+        ("worker-b", 2, 350 - offset, 92, 135, 245, 0.86, 0.78, 6, 7, "high"),
+    ]
+    return [
+        {
+            "worker_id": worker_id,
+            "tracking_id": tracking_id,
+            "confidence": confidence,
+            "reid_confidence": reid_confidence,
+            "bbox": [x, y, width, height],
+            "keypoints": {"format": "coco17", "points": fake_keypoints(frame_id, x + 35, y + 45)},
+            "metadata": {
+                "source": "fake_detection",
+                "rula": {"score": rula, "risk": risk},
+                "reba": {"score": reba, "risk": risk},
+            },
+        }
+        for worker_id, tracking_id, x, y, width, height, confidence, reid_confidence, rula, reba, risk in workers
+    ]
+
+
+def fake_overlay(frame_id: int) -> dict:
+    detections = fake_detections(frame_id)
     return {
         "width": 640,
         "height": 360,
         "detections": [
             {
-                "worker_id": "demo-worker-1",
-                "tracking_id": 1,
-                "bbox": [220 + offset, 70, 180, 270],
-                "keypoints": {"format": "coco17", "points": fake_keypoints(frame_id)},
+                "worker_id": detection["worker_id"],
+                "tracking_id": detection["tracking_id"],
+                "bbox": detection["bbox"],
+                "keypoints": detection["keypoints"],
             }
+            for detection in detections
         ],
     }
 
@@ -47,21 +72,7 @@ def fake_event(session_id: str, cam_id: str, frame_id: int) -> dict:
         "session_id": session_id,
         "timestamp": int(time.time() * 1000),
         "frame_id": frame_id,
-        "detections": [
-            {
-                "worker_id": "demo-worker-1",
-                "tracking_id": 1,
-                "confidence": 0.91,
-                "reid_confidence": 0.87,
-                "bbox": [220, 120, 180, 320],
-                "keypoints": {"format": "coco17", "points": fake_keypoints(frame_id)},
-                "metadata": {
-                    "source": "fake_detection",
-                    "rula": {"score": 4, "risk": "medium"},
-                    "reba": {"score": 5, "risk": "medium"},
-                },
-            }
-        ],
+        "detections": fake_detections(frame_id),
     }
 
 
