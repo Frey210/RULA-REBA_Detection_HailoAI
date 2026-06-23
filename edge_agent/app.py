@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from edge_agent.config import settings
 from edge_agent.detection_process import detection_manager
@@ -15,6 +16,7 @@ from edge_agent.schemas import (
     PairingInfo,
 )
 from edge_agent.state import edge_state
+from edge_agent.streaming import mjpeg_frames
 
 app = FastAPI(title="ErgoQuipt Edge Agent", version="0.1.0")
 app.add_middleware(
@@ -98,3 +100,38 @@ def stop_detection() -> DetectionStatusResponse:
 def detection_status() -> DetectionStatusResponse:
     status = detection_manager.status()
     return DetectionStatusResponse(**status.__dict__)
+
+
+@app.get("/stream/status")
+def stream_status() -> dict:
+    status = detection_manager.status()
+    return {
+        "available": True,
+        "running": status.running,
+        "cam_id": settings.edge_cam_id,
+        "recommended": {
+            "width": 640,
+            "height": 360,
+            "fps": 8,
+            "quality": 65,
+        },
+    }
+
+
+@app.get("/stream/mjpeg")
+def stream_mjpeg(
+    width: int = 640,
+    height: int = 360,
+    fps: int = 8,
+    quality: int = 65,
+    overlay: bool = True,
+) -> StreamingResponse:
+    return StreamingResponse(
+        mjpeg_frames(width=width, height=height, fps=fps, quality=quality, overlay=overlay),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
