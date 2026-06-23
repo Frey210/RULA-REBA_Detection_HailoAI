@@ -93,13 +93,17 @@ def start_detection(payload: DetectionStartRequest) -> DetectionStatusResponse:
         raise HTTPException(status_code=403, detail="Edge node is not paired")
 
     backend_url = payload.backend_url or state.get("backend_url") or settings.edge_backend_url
+    camera_manager.pause_for_detection()
     status = detection_manager.start(payload.session_id, backend_url)
+    if not status.running:
+        camera_manager.resume_preview()
     return DetectionStatusResponse(**status.__dict__)
 
 
 @app.post("/detection/stop", response_model=DetectionStatusResponse)
 def stop_detection() -> DetectionStatusResponse:
     status = detection_manager.stop()
+    camera_manager.resume_preview()
     return DetectionStatusResponse(**status.__dict__)
 
 

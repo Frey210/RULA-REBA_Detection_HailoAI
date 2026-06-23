@@ -35,6 +35,13 @@ class DetectionProcessManager:
             "EDGE_SESSION_ID": session_id,
             "EDGE_BACKEND_URL": backend_url,
             "EDGE_CAM_ID": settings.edge_cam_id,
+            "EDGE_DATA_DIR": str(settings.edge_data_dir),
+            "EDGE_CAMERA_DEVICE": settings.edge_camera_device,
+            "EDGE_CAMERA_WIDTH": str(settings.edge_camera_width),
+            "EDGE_CAMERA_HEIGHT": str(settings.edge_camera_height),
+            "EDGE_HAILO_APPS_DIR": str(settings.edge_hailo_apps_dir),
+            "EDGE_HAILO_MODEL": settings.edge_hailo_model,
+            "EDGE_INFERENCE_FRAME_FPS": str(settings.edge_inference_frame_fps),
         }
         self.process = subprocess.Popen(
             shlex.split(settings.edge_detection_command),

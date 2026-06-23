@@ -36,8 +36,11 @@ class CameraManager:
         self.opened = False
         self.detail = "Camera has not started"
         self.frame_count = 0
+        self.paused_for_detection = False
 
     def ensure_started(self) -> None:
+        if self.paused_for_detection:
+            return
         if settings.edge_stream_source == "demo":
             self.detail = "Stream source is forced to demo"
             return
@@ -54,8 +57,23 @@ class CameraManager:
         self.stop_event.set()
         if self.thread:
             self.thread.join(timeout=2)
+        self.thread = None
+
+    def pause_for_detection(self) -> None:
+        self.paused_for_detection = True
+        self.stop()
+        self._set_status(False, "Camera owned by Hailo detection pipeline")
+
+    def resume_preview(self) -> None:
+        self.paused_for_detection = False
+        self.stop_event.clear()
 
     def read(self, width: int, height: int) -> Image.Image | None:
+        inference_frame = self._read_inference_frame()
+        if inference_frame is not None:
+            if inference_frame.size != (width, height):
+                inference_frame = inference_frame.resize((width, height), Image.Resampling.BILINEAR)
+            return inference_frame
         self.ensure_started()
         with self.lock:
             if self.latest_frame is None:
@@ -65,7 +83,30 @@ class CameraManager:
             frame = frame.resize((width, height), Image.Resampling.BILINEAR)
         return frame
 
+    def _read_inference_frame(self) -> Image.Image | None:
+        path = settings.edge_data_dir / "latest_inference_frame.jpg"
+        try:
+            if time.time() - path.stat().st_mtime > 3:
+                return None
+            with Image.open(path) as image:
+                return image.convert("RGB")
+        except (FileNotFoundError, OSError):
+            return None
+
     def status(self) -> dict:
+        inference_frame = settings.edge_data_dir / "latest_inference_frame.jpg"
+        try:
+            inference_age = time.time() - inference_frame.stat().st_mtime
+        except OSError:
+            inference_age = None
+        if self.paused_for_detection and inference_age is not None and inference_age < 3:
+            return {
+                "source": "hailo",
+                "camera_available": True,
+                "detail": "Frames supplied by Hailo pose pipeline",
+                "frame_count": self.frame_count,
+                "frame_age_ms": round(inference_age * 1000),
+            }
         self.ensure_started()
         with self.lock:
             age = time.monotonic() - self.latest_frame_at if self.latest_frame_at else None

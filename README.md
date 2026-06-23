@@ -41,13 +41,21 @@ uvicorn edge_agent.app:app --host 0.0.0.0 --port 8765
 
 ## Raspberry Pi Detection Command
 
-Configure the command used to start the heavy detection pipeline with:
+Configure the Hailo Apps environment with the `websockets` package:
 
 ```bash
-export EDGE_DETECTION_COMMAND="python -m edge_agent.fake_detection"
+/home/admin/hailo-apps/venv_hailo_apps/bin/pip install websockets
 ```
 
-Replace the fake command with the Hailo YOLO pose pipeline once the model wrapper is implemented.
+Then configure the command used to start the heavy detection pipeline:
+
+```bash
+export EDGE_DETECTION_COMMAND="/home/admin/hailo-apps/venv_hailo_apps/bin/python -m edge_agent.hailo_pose_detection"
+export EDGE_HAILO_APPS_DIR=/home/admin/hailo-apps
+export EDGE_HAILO_MODEL=/usr/share/hailo-models/yolov8s_pose_h8.hef
+```
+
+Use `python -m edge_agent.fake_detection` only as a development fallback without Hailo hardware.
 
 ## Camera Preview Stream
 

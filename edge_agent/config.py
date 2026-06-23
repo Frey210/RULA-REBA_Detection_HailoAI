@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     edge_camera_height: int = 360
     edge_camera_fps: int = 12
     edge_camera_device: str = "/dev/video0"
+    edge_hailo_apps_dir: Path = Path("/home/admin/hailo-apps")
+    edge_hailo_model: str = "/usr/share/hailo-models/yolov8s_pose_h8.hef"
+    edge_inference_frame_fps: int = 8
 
 
 settings = Settings()
