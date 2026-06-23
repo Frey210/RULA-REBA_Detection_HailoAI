@@ -32,6 +32,7 @@ app.add_middleware(
 
 @app.on_event("shutdown")
 def shutdown_camera() -> None:
+    detection_manager.stop()
     camera_manager.stop()
 
 

@@ -106,7 +106,7 @@ def point_score(point) -> float:
 def atomic_write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"updated_at": time.time(), "payload": payload}), encoding="utf-8")
+    temporary.write_text(json.dumps({**payload, "updated_at": time.time()}), encoding="utf-8")
     temporary.replace(path)
 
 
