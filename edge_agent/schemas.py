@@ -12,6 +12,7 @@ class PairingInfo(BaseModel):
 class PairingCompleteRequest(BaseModel):
     pairing_code: str
     backend_url: str
+    edge_base_url: str | None = None
 
 
 class PairingCompleteResponse(BaseModel):
@@ -29,4 +30,3 @@ class DetectionStatusResponse(BaseModel):
     running: bool
     pid: int | None
     command: str
-

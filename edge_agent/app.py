@@ -52,6 +52,7 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
         "device_type": "raspberry_pi_5_hailo8",
         "metadata": {
             "agent_version": "0.1.0",
+            "edge_base_url": payload.edge_base_url,
             "paired_at": datetime.now(UTC).isoformat(),
         },
     }
