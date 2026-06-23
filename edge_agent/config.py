@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     edge_camera_width: int = 640
     edge_camera_height: int = 360
     edge_camera_fps: int = 12
+    edge_camera_device: str = "/dev/video0"
 
 
 settings = Settings()

@@ -56,6 +56,7 @@ The local MJPEG stream is intentionally low bandwidth by default. It uses the at
 ```bash
 export EDGE_STREAM_SOURCE=auto
 export EDGE_CAMERA_INDEX=0
+export EDGE_CAMERA_DEVICE=/dev/video0
 export EDGE_CAMERA_WIDTH=640
 export EDGE_CAMERA_HEIGHT=360
 export EDGE_CAMERA_FPS=12

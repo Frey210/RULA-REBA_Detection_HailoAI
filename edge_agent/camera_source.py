@@ -40,25 +40,27 @@ class CameraFrameSource:
         if self.cv2 is None:
             return self
 
-        capture = self.cv2.VideoCapture(settings.edge_camera_index)
+        backend = getattr(self.cv2, "CAP_V4L2", 0)
+        camera_target: int | str = settings.edge_camera_device or settings.edge_camera_index
+        capture = self.cv2.VideoCapture(camera_target, backend)
         capture.set(self.cv2.CAP_PROP_FRAME_WIDTH, self.width)
         capture.set(self.cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         capture.set(self.cv2.CAP_PROP_FPS, self.fps)
 
         if not capture.isOpened():
             capture.release()
-            self.detail = f"Camera index {settings.edge_camera_index} could not be opened"
+            self.detail = f"Camera {camera_target} could not be opened"
             return self
 
         ok, _frame = capture.read()
         if not ok:
             capture.release()
-            self.detail = f"Camera index {settings.edge_camera_index} opened but did not return frames"
+            self.detail = f"Camera {camera_target} opened but did not return frames"
             return self
 
         self.capture = capture
         self.available = True
-        self.detail = f"Camera index {settings.edge_camera_index}"
+        self.detail = f"Camera {camera_target}"
         return self
 
     def __exit__(self, *_exc) -> None:
