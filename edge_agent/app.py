@@ -110,12 +110,16 @@ def stop_detection() -> DetectionStatusResponse:
 @app.get("/detection/status", response_model=DetectionStatusResponse)
 def detection_status() -> DetectionStatusResponse:
     status = detection_manager.status()
+    if not status.running:
+        camera_manager.resume_preview()
     return DetectionStatusResponse(**status.__dict__)
 
 
 @app.get("/stream/status")
 def stream_status() -> dict:
     status = detection_manager.status()
+    if not status.running:
+        camera_manager.resume_preview()
     source_status = camera_status()
     overlay_payload = read_latest_overlay()
     return {

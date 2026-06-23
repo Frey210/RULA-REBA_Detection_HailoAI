@@ -52,7 +52,7 @@ Then configure the command used to start the heavy detection pipeline:
 ```bash
 export EDGE_DETECTION_COMMAND="/home/admin/hailo-apps/venv_hailo_apps/bin/python -m edge_agent.hailo_pose_detection"
 export EDGE_HAILO_APPS_DIR=/home/admin/hailo-apps
-export EDGE_HAILO_MODEL=/usr/share/hailo-models/yolov8s_pose_h8.hef
+export EDGE_HAILO_MODEL=/usr/local/hailo/resources/models/hailo8/yolov8m_pose.hef
 ```
 
 Use `python -m edge_agent.fake_detection` only as a development fallback without Hailo hardware.

@@ -219,7 +219,7 @@ def main() -> None:
         "--input",
         os.getenv("EDGE_CAMERA_DEVICE", "/dev/video0"),
         "--hef-path",
-        os.getenv("EDGE_HAILO_MODEL", "/usr/share/hailo-models/yolov8s_pose_h8.hef"),
+        os.getenv("EDGE_HAILO_MODEL", "/usr/local/hailo/resources/models/hailo8/yolov8m_pose.hef"),
         "--arch",
         "hailo8",
         "--use-frame",
