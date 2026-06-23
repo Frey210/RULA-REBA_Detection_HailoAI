@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from edge_agent.detection_process import detection_manager
 from edge_agent.config import settings
-from edge_agent.camera_source import CameraFrameSource
+from edge_agent.camera_source import camera_manager
 
 
 def mjpeg_frames(
@@ -25,29 +25,28 @@ def mjpeg_frames(
     frame_interval = 1 / fps
     frame_id = 0
 
-    with CameraFrameSource(width, height, fps) as camera:
-        while True:
-            started_at = time.monotonic()
-            running = detection_manager.status().running
-            frame_id += 1
-            frame = camera.read()
-            if frame is None:
-                image = render_frame(width, height, frame_id, overlay=overlay, running=running)
-            else:
-                image = render_camera_frame(frame, frame_id, overlay=overlay, running=running)
-            buffer = io.BytesIO()
-            image.save(buffer, format="JPEG", quality=quality, optimize=True)
-            jpeg = buffer.getvalue()
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n"
-                + f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
-                + jpeg
-                + b"\r\n"
-            )
+    while True:
+        started_at = time.monotonic()
+        running = detection_manager.status().running
+        frame_id += 1
+        frame = camera_manager.read(width, height)
+        if frame is None:
+            image = render_frame(width, height, frame_id, overlay=overlay, running=running)
+        else:
+            image = render_camera_frame(frame, frame_id, overlay=overlay, running=running)
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=quality, optimize=True)
+        jpeg = buffer.getvalue()
+        yield (
+            b"--frame\r\n"
+            b"Content-Type: image/jpeg\r\n"
+            + f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
+            + jpeg
+            + b"\r\n"
+        )
 
-            elapsed = time.monotonic() - started_at
-            time.sleep(max(0, frame_interval - elapsed))
+        elapsed = time.monotonic() - started_at
+        time.sleep(max(0, frame_interval - elapsed))
 
 
 def render_camera_frame(frame: Image.Image, frame_id: int, *, overlay: bool, running: bool) -> Image.Image:

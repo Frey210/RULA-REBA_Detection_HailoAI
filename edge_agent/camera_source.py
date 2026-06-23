@@ -1,4 +1,6 @@
 import sys
+import threading
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -23,67 +25,129 @@ def import_cv2():
             return None
 
 
-class CameraFrameSource:
-    def __init__(self, width: int, height: int, fps: int) -> None:
-        self.width = width
-        self.height = height
-        self.fps = fps
+class CameraManager:
+    def __init__(self) -> None:
         self.cv2 = import_cv2()
-        self.capture = None
-        self.available = False
-        self.detail = "OpenCV is not available"
+        self.lock = threading.Lock()
+        self.thread: threading.Thread | None = None
+        self.stop_event = threading.Event()
+        self.latest_frame = None
+        self.latest_frame_at = 0.0
+        self.opened = False
+        self.detail = "Camera has not started"
+        self.frame_count = 0
 
-    def __enter__(self) -> "CameraFrameSource":
+    def ensure_started(self) -> None:
         if settings.edge_stream_source == "demo":
             self.detail = "Stream source is forced to demo"
-            return self
+            return
         if self.cv2 is None:
-            return self
+            self.detail = "OpenCV is not available"
+            return
+        if self.thread and self.thread.is_alive():
+            return
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self._run, name="edge-camera-reader", daemon=True)
+        self.thread.start()
 
+    def stop(self) -> None:
+        self.stop_event.set()
+        if self.thread:
+            self.thread.join(timeout=2)
+
+    def read(self, width: int, height: int) -> Image.Image | None:
+        self.ensure_started()
+        with self.lock:
+            if self.latest_frame is None:
+                return None
+            frame = self.latest_frame.copy()
+        if frame.size != (width, height):
+            frame = frame.resize((width, height), Image.Resampling.BILINEAR)
+        return frame
+
+    def status(self) -> dict:
+        self.ensure_started()
+        with self.lock:
+            age = time.monotonic() - self.latest_frame_at if self.latest_frame_at else None
+            healthy = self.opened and age is not None and age < 3
+            frame_count = self.frame_count
+            detail = self.detail
+        return {
+            "source": "camera" if healthy else "demo",
+            "camera_available": healthy,
+            "detail": detail,
+            "frame_count": frame_count,
+            "frame_age_ms": round(age * 1000) if age is not None else None,
+        }
+
+    def _run(self) -> None:
+        while not self.stop_event.is_set():
+            capture = self._open_capture()
+            if capture is None:
+                time.sleep(2)
+                continue
+
+            try:
+                while not self.stop_event.is_set():
+                    ok, frame = capture.read()
+                    if not ok:
+                        self._set_status(False, "Camera read failed; retrying")
+                        break
+
+                    rgb = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB)
+                    image = Image.fromarray(rgb)
+                    with self.lock:
+                        self.latest_frame = image
+                        self.latest_frame_at = time.monotonic()
+                        self.opened = True
+                        self.detail = f"Camera index {settings.edge_camera_index}"
+                        self.frame_count += 1
+            finally:
+                capture.release()
+                self._set_status(False, "Camera released; retrying")
+                time.sleep(1)
+
+    def _open_capture(self):
         backend = getattr(self.cv2, "CAP_V4L2", 0)
-        camera_target: int | str = settings.edge_camera_device or settings.edge_camera_index
-        capture = self.cv2.VideoCapture(camera_target, backend)
-        capture.set(self.cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        capture.set(self.cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        capture.set(self.cv2.CAP_PROP_FPS, self.fps)
-
+        capture = self.cv2.VideoCapture(settings.edge_camera_index, backend)
         if not capture.isOpened():
             capture.release()
-            self.detail = f"Camera {camera_target} could not be opened"
-            return self
+            self._set_status(False, f"Camera index {settings.edge_camera_index} could not be opened")
+            return None
 
-        ok, _frame = capture.read()
+        fourcc = self.cv2.VideoWriter_fourcc(*"MJPG")
+        capture.set(self.cv2.CAP_PROP_FOURCC, fourcc)
+        capture.set(self.cv2.CAP_PROP_FRAME_WIDTH, settings.edge_camera_width)
+        capture.set(self.cv2.CAP_PROP_FRAME_HEIGHT, settings.edge_camera_height)
+        capture.set(self.cv2.CAP_PROP_FPS, settings.edge_camera_fps)
+        if hasattr(self.cv2, "CAP_PROP_BUFFERSIZE"):
+            capture.set(self.cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        ok, frame = capture.read()
         if not ok:
             capture.release()
-            self.detail = f"Camera {camera_target} opened but did not return frames"
-            return self
-
-        self.capture = capture
-        self.available = True
-        self.detail = f"Camera {camera_target}"
-        return self
-
-    def __exit__(self, *_exc) -> None:
-        if self.capture is not None:
-            self.capture.release()
-
-    def read(self) -> Image.Image | None:
-        if not self.available or self.capture is None or self.cv2 is None:
+            self._set_status(False, f"Camera index {settings.edge_camera_index} opened but did not return frames")
             return None
-        ok, frame = self.capture.read()
-        if not ok:
-            return None
-        frame = self.cv2.resize(frame, (self.width, self.height))
+
         rgb = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB)
-        return Image.fromarray(rgb)
+        with self.lock:
+            self.latest_frame = Image.fromarray(rgb)
+            self.latest_frame_at = time.monotonic()
+            self.opened = True
+            self.detail = f"Camera index {settings.edge_camera_index}"
+            self.frame_count += 1
+        return capture
+
+    def _set_status(self, opened: bool, detail: str) -> None:
+        with self.lock:
+            self.opened = opened
+            self.detail = detail
 
 
-def camera_status(width: int = 640, height: int = 360, fps: int = 8) -> dict:
+camera_manager = CameraManager()
+
+
+def camera_status() -> dict:
     if settings.edge_stream_source == "demo":
         return {"source": "demo", "camera_available": False, "detail": "Stream source is forced to demo"}
-    with CameraFrameSource(width, height, fps) as source:
-        return {
-            "source": "camera" if source.available else "demo",
-            "camera_available": source.available,
-            "detail": source.detail,
-        }
+    return camera_manager.status()

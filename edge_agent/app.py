@@ -17,7 +17,7 @@ from edge_agent.schemas import (
 )
 from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames
-from edge_agent.camera_source import camera_status
+from edge_agent.camera_source import camera_manager, camera_status
 
 app = FastAPI(title="ErgoQuipt Edge Agent", version="0.1.0")
 app.add_middleware(
@@ -27,6 +27,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("shutdown")
+def shutdown_camera() -> None:
+    camera_manager.stop()
 
 
 @app.get("/health")
