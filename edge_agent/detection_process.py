@@ -1,4 +1,5 @@
 import os
+import signal
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -46,16 +47,18 @@ class DetectionProcessManager:
         self.process = subprocess.Popen(
             shlex.split(settings.edge_detection_command),
             env=env,
+            start_new_session=True,
         )
         return self.status()
 
     def stop(self) -> DetectionStatus:
         if self.process and self.process.poll() is None:
-            self.process.terminate()
+            os.killpg(self.process.pid, signal.SIGTERM)
             try:
-                self.process.wait(timeout=10)
+                self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.process.kill()
+                os.killpg(self.process.pid, signal.SIGKILL)
+                self.process.wait(timeout=2)
         return self.status()
 
 
