@@ -12,7 +12,11 @@ class Settings(BaseSettings):
     edge_backend_url: str = "http://127.0.0.1:8000"
     edge_data_dir: Path = Path("./data")
     edge_detection_command: str = ""
+    edge_stream_source: str = "auto"
+    edge_camera_index: int = 0
+    edge_camera_width: int = 640
+    edge_camera_height: int = 360
+    edge_camera_fps: int = 12
 
 
 settings = Settings()
-

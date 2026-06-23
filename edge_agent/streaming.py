@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from edge_agent.detection_process import detection_manager
 from edge_agent.config import settings
+from edge_agent.camera_source import CameraFrameSource
 
 
 def mjpeg_frames(
@@ -24,24 +25,45 @@ def mjpeg_frames(
     frame_interval = 1 / fps
     frame_id = 0
 
-    while True:
-        started_at = time.monotonic()
-        running = detection_manager.status().running
-        frame_id += 1
-        image = render_frame(width, height, frame_id, overlay=overlay, running=running)
-        buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=quality, optimize=True)
-        jpeg = buffer.getvalue()
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n"
-            + f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
-            + jpeg
-            + b"\r\n"
-        )
+    with CameraFrameSource(width, height, fps) as camera:
+        while True:
+            started_at = time.monotonic()
+            running = detection_manager.status().running
+            frame_id += 1
+            frame = camera.read()
+            if frame is None:
+                image = render_frame(width, height, frame_id, overlay=overlay, running=running)
+            else:
+                image = render_camera_frame(frame, frame_id, overlay=overlay, running=running)
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=quality, optimize=True)
+            jpeg = buffer.getvalue()
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                + f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
+                + jpeg
+                + b"\r\n"
+            )
 
-        elapsed = time.monotonic() - started_at
-        time.sleep(max(0, frame_interval - elapsed))
+            elapsed = time.monotonic() - started_at
+            time.sleep(max(0, frame_interval - elapsed))
+
+
+def render_camera_frame(frame: Image.Image, frame_id: int, *, overlay: bool, running: bool) -> Image.Image:
+    image = frame.convert("RGB")
+    width, height = image.size
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    draw.rectangle((0, 0, width, 34), fill=(14, 107, 103))
+    status = "RUNNING" if running else "IDLE"
+    draw.text((12, 11), f"{settings.edge_cam_id}  CAMERA  {status}  {width}x{height}", fill=(245, 250, 249), font=font)
+    if overlay and running:
+        draw_camera_overlay(draw, width, height)
+    elif not running:
+        draw.text((12, height - 22), "detection stopped; preview only", fill=(245, 250, 249), font=font)
+    draw.text((width - 88, height - 22), f"frame {frame_id}", fill=(245, 250, 249), font=font)
+    return image
 
 
 def render_frame(width: int, height: int, frame_id: int, *, overlay: bool, running: bool) -> Image.Image:
@@ -117,3 +139,15 @@ def draw_skeleton(draw: ImageDraw.ImageDraw, center_x: int, height: int) -> None
         draw.line((*joints[start], *joints[end]), fill=(255, 198, 41), width=4)
     for x, y in joints.values():
         draw.ellipse((x - 5, y - 5, x + 5, y + 5), fill=(255, 255, 255), outline=(17, 109, 106), width=2)
+
+
+def draw_camera_overlay(draw: ImageDraw.ImageDraw, width: int, height: int) -> None:
+    bbox = (
+        width // 2 - width // 7,
+        max(48, height // 5),
+        width // 2 + width // 7,
+        height - 28,
+    )
+    draw.rectangle(bbox, outline=(33, 212, 165), width=3)
+    draw.text((bbox[0], max(38, bbox[1] - 16)), "overlay preview", fill=(33, 212, 165), font=ImageFont.load_default())
+    draw_skeleton(draw, width // 2, height)

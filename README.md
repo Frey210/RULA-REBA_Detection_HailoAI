@@ -27,6 +27,8 @@ Endpoints:
 - `POST /detection/start`
 - `POST /detection/stop`
 - `GET /detection/status`
+- `GET /stream/status`
+- `GET /stream/mjpeg`
 
 ## Development
 
@@ -47,3 +49,16 @@ export EDGE_DETECTION_COMMAND="python -m edge_agent.fake_detection"
 
 Replace the fake command with the Hailo YOLO pose pipeline once the model wrapper is implemented.
 
+## Camera Preview Stream
+
+The local MJPEG stream is intentionally low bandwidth by default. It uses the attached camera when available and falls back to a generated preview frame if the camera cannot be opened.
+
+```bash
+export EDGE_STREAM_SOURCE=auto
+export EDGE_CAMERA_INDEX=0
+export EDGE_CAMERA_WIDTH=640
+export EDGE_CAMERA_HEIGHT=360
+export EDGE_CAMERA_FPS=12
+```
+
+Use `EDGE_STREAM_SOURCE=demo` to force the generated preview. The Electron client can lower preview FPS to 4 or 8 without stopping detection.

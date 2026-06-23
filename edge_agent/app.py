@@ -17,6 +17,7 @@ from edge_agent.schemas import (
 )
 from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames
+from edge_agent.camera_source import camera_status
 
 app = FastAPI(title="ErgoQuipt Edge Agent", version="0.1.0")
 app.add_middleware(
@@ -105,10 +106,12 @@ def detection_status() -> DetectionStatusResponse:
 @app.get("/stream/status")
 def stream_status() -> dict:
     status = detection_manager.status()
+    source_status = camera_status()
     return {
         "available": True,
         "running": status.running,
         "cam_id": settings.edge_cam_id,
+        **source_status,
         "recommended": {
             "width": 640,
             "height": 360,
