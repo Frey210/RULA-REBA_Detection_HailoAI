@@ -18,6 +18,7 @@ from edge_agent.schemas import (
 from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames
 from edge_agent.camera_source import camera_manager, camera_status
+from edge_agent.overlay_store import read_latest_overlay, write_latest_overlay
 
 app = FastAPI(title="ErgoQuipt Edge Agent", version="0.1.0")
 app.add_middleware(
@@ -112,11 +113,13 @@ def detection_status() -> DetectionStatusResponse:
 def stream_status() -> dict:
     status = detection_manager.status()
     source_status = camera_status()
+    overlay_payload = read_latest_overlay()
     return {
         "available": True,
         "running": status.running,
         "cam_id": settings.edge_cam_id,
         **source_status,
+        "overlay_available": overlay_payload is not None,
         "recommended": {
             "width": 640,
             "height": 360,
@@ -143,3 +146,9 @@ def stream_mjpeg(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/overlay/latest")
+def update_overlay(payload: dict) -> dict[str, str]:
+    write_latest_overlay(payload)
+    return {"status": "ok"}

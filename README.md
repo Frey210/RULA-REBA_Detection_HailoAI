@@ -63,3 +63,26 @@ export EDGE_CAMERA_FPS=12
 ```
 
 Use `EDGE_STREAM_SOURCE=demo` to force the generated preview. The Electron client can lower preview FPS to 4 or 8 without stopping detection.
+
+Camera overlays are drawn only from fresh detection coordinates. A detection pipeline can update the preview overlay by posting the latest frame dimensions and detections to:
+
+```text
+POST /overlay/latest
+```
+
+Payload shape:
+
+```json
+{
+  "width": 640,
+  "height": 360,
+  "detections": [
+    {
+      "worker_id": "worker-1",
+      "tracking_id": 1,
+      "bbox": [220, 120, 180, 320],
+      "keypoints": {"format": "coco17", "points": []}
+    }
+  ]
+}
+```
