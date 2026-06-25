@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 
 import cv2
 
+from edge_agent.ergonomics import assess_pose
+
 
 COCO_KEYPOINTS = [
     "nose",
@@ -157,6 +159,7 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                         }
                     )
 
+            assessment = assess_pose(points)
             detections.append(
                 {
                     "worker_id": f"track-{track_id}",
@@ -165,7 +168,13 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                     "reid_confidence": None,
                     "bbox": [left, top, box_width, box_height],
                     "keypoints": {"format": "coco17", "points": points},
-                    "metadata": {"source": "hailo_yolov8_pose"},
+                    "metadata": {
+                        "source": "hailo_yolov8_pose",
+                        "angles": assessment["angles"],
+                        "assessment_quality": assessment["quality"],
+                        "rula": assessment["rula"],
+                        "reba": assessment["reba"],
+                    },
                 }
             )
 
