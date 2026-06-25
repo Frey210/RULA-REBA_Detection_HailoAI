@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import cv2
 
 from edge_agent.ergonomics import assess_pose
+from edge_agent.soft_reid import SoftReIdentifier
 
 
 COCO_KEYPOINTS = [
@@ -89,6 +90,10 @@ class PoseCallbackData:
         self.data_dir = data_dir
         self.last_frame_write = 0.0
         self.frame_interval = 1 / max(1, int(os.getenv("EDGE_INFERENCE_FRAME_FPS", "8")))
+        self.reidentifier = SoftReIdentifier(
+            ttl_seconds=float(os.getenv("EDGE_REID_TTL_SECONDS", "10")),
+            similarity_threshold=float(os.getenv("EDGE_REID_SIMILARITY_THRESHOLD", "0.82")),
+        )
 
     def __getattr__(self, name):
         return getattr(self._base, name)
@@ -119,6 +124,24 @@ def atomic_write_frame(path: Path, frame) -> None:
         temporary.replace(path)
 
 
+def appearance_signature(frame, bbox: list[float]) -> list[float] | None:
+    if frame is None:
+        return None
+    height, width = frame.shape[:2]
+    x, y, box_width, box_height = bbox
+    left = max(0, min(width - 1, int(x + box_width * 0.15)))
+    right = max(left + 1, min(width, int(x + box_width * 0.85)))
+    top = max(0, min(height - 1, int(y + box_height * 0.15)))
+    bottom = max(top + 1, min(height, int(y + box_height * 0.7)))
+    crop = frame[top:bottom, left:right]
+    if crop.size == 0:
+        return None
+    hsv = cv2.cvtColor(crop, cv2.COLOR_RGB2HSV)
+    histogram = cv2.calcHist([hsv], [0, 1], None, [12, 8], [0, 180, 0, 256])
+    cv2.normalize(histogram, histogram)
+    return histogram.flatten().astype(float).tolist()
+
+
 def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
     def app_callback(element, buffer, user_data):
         if buffer is None:
@@ -129,8 +152,10 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
         if not width or not height:
             return
 
+        frame = get_numpy_from_buffer(buffer, image_format, width, height) if user_data.use_frame else None
         roi = hailo.get_roi_from_buffer(buffer)
         detections = []
+        active_track_ids = set()
         for detection in roi.get_objects_typed(hailo.HAILO_DETECTION):
             if detection.get_label() != "person":
                 continue
@@ -144,6 +169,7 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
             tracks = detection.get_objects_typed(hailo.HAILO_UNIQUE_ID)
             if tracks:
                 track_id = int(tracks[0].get_id())
+            active_track_ids.add(track_id)
 
             points = []
             landmarks = detection.get_objects_typed(hailo.HAILO_LANDMARKS)
@@ -159,17 +185,26 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                         }
                     )
 
+            bbox_values = [left, top, box_width, box_height]
+            signature = appearance_signature(frame, bbox_values)
+            worker_id, reid_confidence, identity_status = user_data.reidentifier.assign(
+                track_id,
+                signature,
+            )
             assessment = assess_pose(points)
             detections.append(
                 {
-                    "worker_id": f"track-{track_id}",
+                    "worker_id": worker_id,
                     "tracking_id": track_id,
                     "confidence": float(detection.get_confidence()),
-                    "reid_confidence": None,
-                    "bbox": [left, top, box_width, box_height],
+                    "reid_confidence": reid_confidence,
+                    "bbox": bbox_values,
                     "keypoints": {"format": "coco17", "points": points},
                     "metadata": {
                         "source": "hailo_yolov8_pose",
+                        "identity_status": identity_status,
+                        "reid_method": "torso_hsv_histogram",
+                        "reid_ttl_seconds": user_data.reidentifier.ttl_seconds,
                         "angles": assessment["angles"],
                         "assessment_quality": assessment["quality"],
                         "rula": assessment["rula"],
@@ -177,6 +212,7 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                     },
                 }
             )
+        user_data.reidentifier.mark_active_tracks(active_track_ids)
 
         frame_id = user_data.get_count()
         event = {
@@ -196,7 +232,6 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
 
         now = time.monotonic()
         if user_data.use_frame and now - user_data.last_frame_write >= user_data.frame_interval:
-            frame = get_numpy_from_buffer(buffer, image_format, width, height)
             if frame is not None:
                 if image_format == "RGB":
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)

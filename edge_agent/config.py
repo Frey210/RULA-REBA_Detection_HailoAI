@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     edge_hailo_apps_dir: Path = Path("/home/admin/hailo-apps")
     edge_hailo_model: str = "/usr/local/hailo/resources/models/hailo8/yolov8m_pose.hef"
     edge_inference_frame_fps: int = 8
+    edge_reid_ttl_seconds: float = 10.0
+    edge_reid_similarity_threshold: float = 0.82
 
 
 settings = Settings()
