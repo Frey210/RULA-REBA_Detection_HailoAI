@@ -198,6 +198,45 @@ Contoh:
 
 ---
 
+# WORKER ENROLLMENT MULTI-VIEW
+
+Worker Registry menyimpan foto full-body untuk:
+
+```text
+Front
+Left Side
+Right Side
+```
+
+Foto diambil menggunakan APD dan pakaian kerja normal. Foto enrollment bersifat
+privat, user-scoped, dan tidak boleh diekspos sebagai static public URL.
+
+Pipeline identitas yang direncanakan:
+
+```text
+Hailo Tracking
+→ Short-term Soft Re-ID
+→ Body Appearance Embedding
+→ Candidate Worker Ranking
+→ Confidence Gate
+→ Operator Confirmation
+```
+
+Enrollment bukan identitas biometrik final. Sistem hanya boleh melakukan
+auto-suggestion jika confidence memadai dan perbedaan kandidat pertama dengan
+kandidat kedua cukup jelas. Assignment pekerja tetap dapat dikonfirmasi atau
+dikoreksi oleh operator.
+
+Tahapan implementasi:
+
+1. Penyimpanan dan preview foto multi-view.
+2. Quality check full-body, resolusi, blur, dan occlusion.
+3. Ekstraksi body appearance embedding.
+4. Candidate matching terhadap enrollment gallery.
+5. Evaluasi false match dan threshold pada kondisi APD industri.
+
+---
+
 # FOTO SNAPSHOT
 
 Fitur baru.
