@@ -102,6 +102,15 @@ def _segment_angle(origin, endpoint, reference) -> float | None:
     )
 
 
+def _neck_angle(shoulder_mid, ear_mid, hip_mid) -> float | None:
+    if shoulder_mid is None or ear_mid is None or hip_mid is None:
+        return None
+    return _vector_angle(
+        (ear_mid[0] - shoulder_mid[0], ear_mid[1] - shoulder_mid[1]),
+        (shoulder_mid[0] - hip_mid[0], shoulder_mid[1] - hip_mid[1]),
+    )
+
+
 def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35) -> dict[str, Any]:
     p = _point_map(points, threshold)
     shoulder_mid = _midpoint(p.get(5), p.get(6))
@@ -109,7 +118,7 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
     ear_mid = _midpoint(p.get(3), p.get(4)) or p.get(0)
 
     angles = {
-        "neck": _segment_angle(shoulder_mid, ear_mid, hip_mid),
+        "neck": _neck_angle(shoulder_mid, ear_mid, hip_mid),
         "trunk": _segment_angle(hip_mid, shoulder_mid, (hip_mid[0], hip_mid[1] - 100)) if hip_mid else None,
         "ua_l": _segment_angle(p.get(5), p.get(7), p.get(11)),
         "ua_r": _segment_angle(p.get(6), p.get(8), p.get(12)),

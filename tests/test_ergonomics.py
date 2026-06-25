@@ -31,6 +31,7 @@ class ErgonomicsTest(unittest.TestCase):
         result = calculate_pose_angles(STANDING_POSE)
         self.assertEqual(result["quality"]["status"], "good")
         self.assertEqual(result["quality"]["measured_components"], 8)
+        self.assertLess(result["angles"]["neck"], 1)
         self.assertLess(result["angles"]["trunk"], 1)
 
     def test_assessment_returns_rula_and_reba(self):
