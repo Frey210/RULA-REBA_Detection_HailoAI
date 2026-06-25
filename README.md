@@ -57,6 +57,21 @@ export EDGE_HAILO_MODEL=/usr/local/hailo/resources/models/hailo8/yolov8m_pose.he
 
 Use `python -m edge_agent.fake_detection` only as a development fallback without Hailo hardware.
 
+## Soft Worker Re-Identification
+
+The pose pipeline combines the Hailo tracking ID with a lightweight HSV torso
+signature. If a worker leaves the frame and returns within the configured TTL,
+the edge node attempts to preserve the same `REID_xxxx` worker ID.
+
+```bash
+export EDGE_REID_TTL_SECONDS=10
+export EDGE_REID_SIMILARITY_THRESHOLD=0.82
+```
+
+This is single-camera soft Re-ID for short interruptions. It is not biometric
+identification and should not be treated as confirmed employee identity until a
+user links the session worker to the worker registry.
+
 ## Camera Preview Stream
 
 The local MJPEG stream is intentionally low bandwidth by default. It uses the attached camera when available and falls back to a generated preview frame if the camera cannot be opened.
