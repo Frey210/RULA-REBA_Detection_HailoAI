@@ -37,7 +37,7 @@ def mjpeg_frames(
         else:
             image = render_camera_frame(frame, frame_id, overlay=overlay, running=running)
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=quality, optimize=True)
+        image.save(buffer, format="JPEG", quality=quality)
         jpeg = buffer.getvalue()
         yield (
             b"--frame\r\n"

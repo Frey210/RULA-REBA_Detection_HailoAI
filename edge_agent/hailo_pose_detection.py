@@ -89,10 +89,16 @@ class PoseCallbackData:
         self.publisher = publisher
         self.data_dir = data_dir
         self.last_frame_write = 0.0
+        self.last_event_publish = 0.0
+        self.last_signature_at: dict[int, float] = {}
+        self.signature_cache: dict[int, list[float]] = {}
         self.frame_interval = 1 / max(1, int(os.getenv("EDGE_INFERENCE_FRAME_FPS", "8")))
+        self.event_interval = 1 / max(1, int(os.getenv("EDGE_EVENT_FPS", "4")))
+        self.signature_interval = 1 / max(1, int(os.getenv("EDGE_REID_SIGNATURE_FPS", "2")))
         self.reidentifier = SoftReIdentifier(
             ttl_seconds=float(os.getenv("EDGE_REID_TTL_SECONDS", "10")),
-            similarity_threshold=float(os.getenv("EDGE_REID_SIMILARITY_THRESHOLD", "0.82")),
+            similarity_threshold=float(os.getenv("EDGE_REID_SIMILARITY_THRESHOLD", "0.76")),
+            track_grace_seconds=float(os.getenv("EDGE_REID_TRACK_GRACE_SECONDS", "1.5")),
         )
 
     def __getattr__(self, name):
@@ -154,9 +160,21 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
 
         frame = get_numpy_from_buffer(buffer, image_format, width, height) if user_data.use_frame else None
         roi = hailo.get_roi_from_buffer(buffer)
+        pose_detections = [
+            detection
+            for detection in roi.get_objects_typed(hailo.HAILO_DETECTION)
+            if detection.get_label() == "person"
+        ]
+        active_track_ids = {
+            int(tracks[0].get_id())
+            for detection in pose_detections
+            if (tracks := detection.get_objects_typed(hailo.HAILO_UNIQUE_ID))
+        }
+        now = time.monotonic()
+        user_data.reidentifier.prepare_frame(active_track_ids, now=now)
+
         detections = []
-        active_track_ids = set()
-        for detection in roi.get_objects_typed(hailo.HAILO_DETECTION):
+        for detection in pose_detections:
             if detection.get_label() != "person":
                 continue
 
@@ -169,8 +187,6 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
             tracks = detection.get_objects_typed(hailo.HAILO_UNIQUE_ID)
             if tracks:
                 track_id = int(tracks[0].get_id())
-            active_track_ids.add(track_id)
-
             points = []
             landmarks = detection.get_objects_typed(hailo.HAILO_LANDMARKS)
             if landmarks:
@@ -186,10 +202,20 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                     )
 
             bbox_values = [left, top, box_width, box_height]
-            signature = appearance_signature(frame, bbox_values)
+            signature = user_data.signature_cache.get(track_id)
+            if frame is not None and (
+                signature is None
+                or now - user_data.last_signature_at.get(track_id, 0) >= user_data.signature_interval
+            ):
+                sampled_signature = appearance_signature(frame, bbox_values)
+                if sampled_signature:
+                    signature = sampled_signature
+                    user_data.signature_cache[track_id] = sampled_signature
+                    user_data.last_signature_at[track_id] = now
             worker_id, reid_confidence, identity_status = user_data.reidentifier.assign(
                 track_id,
                 signature,
+                now=now,
             )
             assessment = assess_pose(points)
             detections.append(
@@ -212,7 +238,10 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                     },
                 }
             )
-        user_data.reidentifier.mark_active_tracks(active_track_ids)
+        for track_id in set(user_data.signature_cache) - active_track_ids:
+            if track_id not in user_data.reidentifier.track_to_worker:
+                user_data.signature_cache.pop(track_id, None)
+                user_data.last_signature_at.pop(track_id, None)
 
         frame_id = user_data.get_count()
         event = {
@@ -224,13 +253,14 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
             "frame_id": frame_id,
             "detections": detections,
         }
-        user_data.publisher.publish(event)
+        if now - user_data.last_event_publish >= user_data.event_interval:
+            user_data.publisher.publish(event)
+            user_data.last_event_publish = now
         atomic_write_json(
             user_data.data_dir / "latest_overlay.json",
             {"width": width, "height": height, "detections": detections},
         )
 
-        now = time.monotonic()
         if user_data.use_frame and now - user_data.last_frame_write >= user_data.frame_interval:
             if frame is not None:
                 if image_format == "RGB":

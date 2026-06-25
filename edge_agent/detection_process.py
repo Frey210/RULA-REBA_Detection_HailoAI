@@ -43,8 +43,11 @@ class DetectionProcessManager:
             "EDGE_HAILO_APPS_DIR": str(settings.edge_hailo_apps_dir),
             "EDGE_HAILO_MODEL": settings.edge_hailo_model,
             "EDGE_INFERENCE_FRAME_FPS": str(settings.edge_inference_frame_fps),
+            "EDGE_EVENT_FPS": str(settings.edge_event_fps),
+            "EDGE_REID_SIGNATURE_FPS": str(settings.edge_reid_signature_fps),
             "EDGE_REID_TTL_SECONDS": str(settings.edge_reid_ttl_seconds),
             "EDGE_REID_SIMILARITY_THRESHOLD": str(settings.edge_reid_similarity_threshold),
+            "EDGE_REID_TRACK_GRACE_SECONDS": str(settings.edge_reid_track_grace_seconds),
         }
         self.process = subprocess.Popen(
             shlex.split(settings.edge_detection_command),
