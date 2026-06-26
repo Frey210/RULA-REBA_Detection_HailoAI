@@ -2,7 +2,7 @@ import socket
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -16,7 +16,7 @@ from edge_agent.schemas import (
     PairingInfo,
 )
 from edge_agent.state import edge_state
-from edge_agent.streaming import mjpeg_frames
+from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
 from edge_agent.camera_source import camera_manager, camera_status
 from edge_agent.overlay_store import read_latest_overlay, write_latest_overlay
 
@@ -154,6 +154,23 @@ def stream_mjpeg(
             "Pragma": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@app.get("/snapshot/latest")
+def snapshot_latest(
+    width: int = 640,
+    height: int = 360,
+    quality: int = 76,
+    overlay: bool = True,
+) -> Response:
+    content = snapshot_jpeg(width=width, height=height, quality=quality, overlay=overlay)
+    if content is None:
+        raise HTTPException(status_code=503, detail="No recent camera frame is available")
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
     )
 
 

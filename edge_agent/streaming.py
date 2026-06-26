@@ -12,6 +12,26 @@ from edge_agent.camera_source import camera_manager
 from edge_agent.overlay_store import read_latest_overlay
 
 
+def snapshot_jpeg(
+    *, width: int = 640, height: int = 360, quality: int = 76, overlay: bool = True
+) -> bytes | None:
+    width = min(max(width, 320), 960)
+    height = min(max(height, 180), 540)
+    quality = min(max(quality, 45), 90)
+    frame = camera_manager.read(width, height)
+    if frame is None:
+        return None
+    image = render_camera_frame(
+        frame,
+        int(time.time() * 1000) % 1_000_000,
+        overlay=overlay,
+        running=detection_manager.status().running,
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=quality, optimize=True)
+    return buffer.getvalue()
+
+
 def mjpeg_frames(
     *,
     width: int = 640,
