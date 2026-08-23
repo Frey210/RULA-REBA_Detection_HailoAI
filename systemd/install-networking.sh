@@ -24,8 +24,7 @@ nmcli connection modify "$hotspot_name" \
 
 install -m 0644 "$repo/systemd/ergoquipt-wifi-fallback.service" /etc/systemd/system/
 install -m 0755 "$repo/systemd/ergoquipt-wifi-fallback.sh" /usr/local/sbin/ergoquipt-wifi-fallback
-printf 'admin ALL=(root) NOPASSWD: /usr/bin/nmcli\n' >/etc/sudoers.d/ergoquipt-network
-chmod 0440 /etc/sudoers.d/ergoquipt-network
+install -m 0440 "$repo/systemd/ergoquipt-network.sudoers" /etc/sudoers.d/ergoquipt-network
 visudo -cf /etc/sudoers.d/ergoquipt-network
 
 cat >/etc/dnsmasq.d/ergoquipt-direct-lan.conf <<'EOF'

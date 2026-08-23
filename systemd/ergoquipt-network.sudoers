@@ -1,0 +1,1 @@
+admin ALL=(root) NOPASSWD: /usr/bin/nmcli
