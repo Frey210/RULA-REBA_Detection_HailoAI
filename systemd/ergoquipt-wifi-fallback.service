@@ -1,0 +1,14 @@
+[Unit]
+Description=ErgoQuipt Wi-Fi setup hotspot fallback
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/home/admin/RULA-REBA_Detection_HailoAI/.env
+ExecStart=/usr/local/sbin/ergoquipt-wifi-fallback
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     edge_reid_ttl_seconds: float = 10.0
     edge_reid_similarity_threshold: float = 0.76
     edge_reid_track_grace_seconds: float = 1.5
+    edge_wifi_interface: str = "wlan0"
+    edge_ethernet_interface: str = "eth0"
+    edge_hotspot_connection: str = "ErgoQuipt Setup"
+    edge_hotspot_ssid: str = "ErgoQuipt-CAM01"
+    edge_direct_lan_address: str = "10.55.0.1/24"
 
 
 settings = Settings()

@@ -2,18 +2,20 @@ import socket
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from edge_agent.config import settings
 from edge_agent.detection_process import detection_manager
+from edge_agent.networking import NetworkCommandError, connect_wifi, network_status, scan_wifi
 from edge_agent.schemas import (
     DetectionStartRequest,
     DetectionStatusResponse,
     PairingCompleteRequest,
     PairingCompleteResponse,
     PairingInfo,
+    WifiConnectRequest,
 )
 from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
@@ -50,6 +52,36 @@ def pairing_info() -> PairingInfo:
         status="running" if detection_manager.status().running else "idle",
         paired=bool(state.get("paired")),
     )
+
+
+def require_paired() -> None:
+    if not edge_state.read().get("paired"):
+        raise HTTPException(status_code=403, detail="Edge node is not paired")
+
+
+@app.get("/network/status")
+def get_network_status() -> dict:
+    require_paired()
+    try:
+        return network_status()
+    except NetworkCommandError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/network/wifi")
+def get_wifi_networks() -> dict[str, list[dict]]:
+    require_paired()
+    try:
+        return {"networks": scan_wifi()}
+    except NetworkCommandError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/network/wifi/connect", status_code=202)
+def connect_to_wifi(payload: WifiConnectRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
+    require_paired()
+    background_tasks.add_task(connect_wifi, payload.ssid, payload.password)
+    return {"status": "connecting", "ssid": payload.ssid}
 
 
 @app.post("/pairing/complete", response_model=PairingCompleteResponse)
@@ -89,9 +121,8 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
 
 @app.post("/detection/start", response_model=DetectionStatusResponse)
 def start_detection(payload: DetectionStartRequest) -> DetectionStatusResponse:
+    require_paired()
     state = edge_state.read()
-    if not state.get("paired"):
-        raise HTTPException(status_code=403, detail="Edge node is not paired")
 
     backend_url = payload.backend_url or state.get("backend_url") or settings.edge_backend_url
     camera_manager.pause_for_detection()

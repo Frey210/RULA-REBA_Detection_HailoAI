@@ -29,6 +29,19 @@ Endpoints:
 - `GET /detection/status`
 - `GET /stream/status`
 - `GET /stream/mjpeg`
+- `GET /network/status`
+- `GET /network/wifi`
+- `POST /network/wifi/connect`
+
+## Product networking
+
+Install direct-LAN DHCP and the fallback setup hotspot once on the Raspberry Pi:
+
+```bash
+sudo ./systemd/install-networking.sh
+```
+
+Direct LAN uses `10.55.0.1/24` and gives the laptop an address without advertising a default gateway or DNS server, so the laptop keeps using Wi-Fi for internet. If no saved Wi-Fi connects within 60 seconds, the Pi starts `ErgoQuipt-CAM01` at `10.42.0.1`. The installer prints the generated WPA2 password that must be placed on the device label.
 
 ## Development
 
