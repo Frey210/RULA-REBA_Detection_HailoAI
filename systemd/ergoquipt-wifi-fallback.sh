@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-connection="${EDGE_HOTSPOT_CONNECTION:-ErgoQuipt Setup}"
+connection="${EDGE_HOTSPOT_CONNECTION:-ERGoSIGHT Setup}"
 interface="${EDGE_WIFI_INTERFACE:-wlan0}"
 
 sleep "${EDGE_WIFI_FALLBACK_SECONDS:-60}"

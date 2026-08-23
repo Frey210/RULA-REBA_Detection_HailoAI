@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     edge_reid_track_grace_seconds: float = 1.5
     edge_wifi_interface: str = "wlan0"
     edge_ethernet_interface: str = "eth0"
-    edge_hotspot_connection: str = "ErgoQuipt Setup"
-    edge_hotspot_ssid: str = "ErgoQuipt-CAM01"
+    edge_hotspot_connection: str = "ERGoSIGHT Setup"
+    edge_hotspot_ssid: str = "ERGoSIGHT-CAM01"
     edge_direct_lan_address: str = "10.55.0.1/24"
 
 

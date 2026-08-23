@@ -22,7 +22,7 @@ from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
 from edge_agent.camera_source import camera_manager, camera_status
 from edge_agent.overlay_store import read_latest_overlay, write_latest_overlay
 
-app = FastAPI(title="ErgoQuipt Edge Agent", version="0.1.0")
+app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

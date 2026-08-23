@@ -1,5 +1,5 @@
 [Unit]
-Description=ErgoQuipt lightweight edge agent
+Description=ERGoSIGHT lightweight edge agent
 After=network-online.target hailort.service
 Wants=network-online.target
 
@@ -14,4 +14,3 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-
