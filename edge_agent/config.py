@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     edge_camera_device: str = "/dev/video0"
     edge_hailo_apps_dir: Path = Path("/home/admin/hailo-apps")
     edge_hailo_model: str = "/usr/local/hailo/resources/models/hailo8/yolov8m_pose.hef"
+    edge_hand_landmark_model: str = "./models/hand_landmark_lite.tflite"
+    edge_hand_landmark_fps: int = 3
+    edge_hand_landmark_confidence: float = 0.5
     edge_inference_frame_fps: int = 6
     edge_event_fps: int = 4
     edge_reid_signature_fps: int = 2

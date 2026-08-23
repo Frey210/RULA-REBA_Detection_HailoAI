@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import cv2
 
 from edge_agent.ergonomics import assess_pose
+from edge_agent.hand_landmarks import HandLandmarkDetector
 from edge_agent.soft_reid import SoftReIdentifier
 
 
@@ -92,9 +93,14 @@ class PoseCallbackData:
         self.last_event_publish = 0.0
         self.last_signature_at: dict[int, float] = {}
         self.signature_cache: dict[int, list[float]] = {}
+        self.last_hand_at: dict[int, float] = {}
+        self.hand_cache: dict[int, list[dict]] = {}
         self.frame_interval = 1 / max(1, int(os.getenv("EDGE_INFERENCE_FRAME_FPS", "8")))
         self.event_interval = 1 / max(1, int(os.getenv("EDGE_EVENT_FPS", "4")))
         self.signature_interval = 1 / max(1, int(os.getenv("EDGE_REID_SIGNATURE_FPS", "2")))
+        self.hand_interval = 1 / max(1, int(os.getenv("EDGE_HAND_LANDMARK_FPS", "3")))
+        self.hand_detector: HandLandmarkDetector | None = None
+        self.hand_detector_attempted = False
         self.reidentifier = SoftReIdentifier(
             ttl_seconds=float(os.getenv("EDGE_REID_TTL_SECONDS", "10")),
             similarity_threshold=float(os.getenv("EDGE_REID_SIMILARITY_THRESHOLD", "0.76")),
@@ -159,6 +165,12 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
             return
 
         frame = get_numpy_from_buffer(buffer, image_format, width, height) if user_data.use_frame else None
+        if frame is not None and not user_data.hand_detector_attempted:
+            user_data.hand_detector_attempted = True
+            user_data.hand_detector = HandLandmarkDetector(
+                os.getenv("EDGE_HAND_LANDMARK_MODEL", "./models/hand_landmark_lite.tflite"),
+                float(os.getenv("EDGE_HAND_LANDMARK_CONFIDENCE", "0.5")),
+            )
         roi = hailo.get_roi_from_buffer(buffer)
         pose_detections = [
             detection
@@ -201,6 +213,14 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                         }
                     )
 
+            if user_data.hand_detector is not None and frame is not None and (
+                track_id not in user_data.hand_cache
+                or now - user_data.last_hand_at.get(track_id, 0) >= user_data.hand_interval
+            ):
+                user_data.hand_cache[track_id] = user_data.hand_detector.detect(frame, points)
+                user_data.last_hand_at[track_id] = now
+            points.extend(user_data.hand_cache.get(track_id, []))
+
             bbox_values = [left, top, box_width, box_height]
             signature = user_data.signature_cache.get(track_id)
             if frame is not None and (
@@ -225,7 +245,7 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
                     "confidence": float(detection.get_confidence()),
                     "reid_confidence": reid_confidence,
                     "bbox": bbox_values,
-                    "keypoints": {"format": "coco17", "points": points},
+                    "keypoints": {"format": "coco17+hand21", "points": points},
                     "metadata": {
                         "source": "hailo_yolov8_pose",
                         "identity_status": identity_status,
@@ -242,6 +262,8 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
             if track_id not in user_data.reidentifier.track_to_worker:
                 user_data.signature_cache.pop(track_id, None)
                 user_data.last_signature_at.pop(track_id, None)
+                user_data.hand_cache.pop(track_id, None)
+                user_data.last_hand_at.pop(track_id, None)
 
         frame_id = user_data.get_count()
         event = {
@@ -316,6 +338,8 @@ def main() -> None:
     try:
         app.run()
     finally:
+        if user_data.hand_detector is not None:
+            user_data.hand_detector.close()
         publisher.stop()
 
 

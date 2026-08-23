@@ -198,6 +198,7 @@ def draw_detection_overlay(draw: ImageDraw.ImageDraw, width: int, height: int, p
 
 def draw_keypoints(draw: ImageDraw.ImageDraw, points: list, scale_x: float, scale_y: float) -> None:
     point_map = {}
+    named_points = {}
     for point in points:
         if not isinstance(point, dict):
             continue
@@ -207,7 +208,10 @@ def draw_keypoints(draw: ImageDraw.ImageDraw, points: list, scale_x: float, scal
         point_id = point.get("id")
         if not isinstance(point_id, int):
             continue
-        point_map[point_id] = (int(float(point.get("x", 0)) * scale_x), int(float(point.get("y", 0)) * scale_y))
+        position = (int(float(point.get("x", 0)) * scale_x), int(float(point.get("y", 0)) * scale_y))
+        point_map[point_id] = position
+        if isinstance(point.get("name"), str):
+            named_points[point["name"]] = position
 
     coco_bones = [
         (5, 7),
@@ -228,5 +232,31 @@ def draw_keypoints(draw: ImageDraw.ImageDraw, points: list, scale_x: float, scal
     for start, end in coco_bones:
         if start in point_map and end in point_map:
             draw.line((*point_map[start], *point_map[end]), fill=(255, 198, 41), width=3)
+
+    hand_bones = (
+        (0, 1), (1, 2), (2, 3), (3, 4),
+        (0, 5), (5, 6), (6, 7), (7, 8),
+        (0, 9), (9, 10), (10, 11), (11, 12),
+        (0, 13), (13, 14), (14, 15), (15, 16),
+        (0, 17), (17, 18), (18, 19), (19, 20),
+        (5, 9), (9, 13), (13, 17),
+    )
+    hand_names = (
+        "wrist", "thumb_cmc", "thumb_mcp", "thumb_ip", "thumb_tip",
+        "index_mcp", "index_pip", "index_dip", "index_tip",
+        "middle_mcp", "middle_pip", "middle_dip", "middle_tip",
+        "ring_mcp", "ring_pip", "ring_dip", "ring_tip",
+        "pinky_mcp", "pinky_pip", "pinky_dip", "pinky_tip",
+    )
+    for side, body_wrist_id in (("left", 9), ("right", 10)):
+        hand_points = {
+            index: named_points.get(f"{side}_hand_{name}")
+            for index, name in enumerate(hand_names)
+        }
+        if body_wrist_id in point_map and hand_points[0] is not None:
+            draw.line((*point_map[body_wrist_id], *hand_points[0]), fill=(255, 198, 41), width=3)
+        for start, end in hand_bones:
+            if hand_points[start] is not None and hand_points[end] is not None:
+                draw.line((*hand_points[start], *hand_points[end]), fill=(255, 198, 41), width=2)
     for x, y in point_map.values():
         draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill=(255, 255, 255), outline=(17, 109, 106), width=2)

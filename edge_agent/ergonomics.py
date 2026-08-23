@@ -73,6 +73,18 @@ def _point_map(points: list[dict[str, Any]], threshold: float) -> dict[int, tupl
     }
 
 
+def _named_point_map(
+    points: list[dict[str, Any]], threshold: float
+) -> dict[str, tuple[float, float]]:
+    return {
+        str(point["name"]): (float(point["x"]), float(point["y"]))
+        for point in points
+        if isinstance(point, dict)
+        and isinstance(point.get("name"), str)
+        and float(point.get("score", 0)) >= threshold
+    }
+
+
 def _midpoint(a: tuple[float, float] | None, b: tuple[float, float] | None):
     if a is None or b is None:
         return None
@@ -113,9 +125,15 @@ def _neck_angle(shoulder_mid, ear_mid, hip_mid) -> float | None:
 
 def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35) -> dict[str, Any]:
     p = _point_map(points, threshold)
+    named = _named_point_map(points, threshold)
     shoulder_mid = _midpoint(p.get(5), p.get(6))
     hip_mid = _midpoint(p.get(11), p.get(12))
     ear_mid = _midpoint(p.get(3), p.get(4)) or p.get(0)
+
+    left_palm = _midpoint(named.get("left_hand_index_mcp"), named.get("left_hand_pinky_mcp"))
+    right_palm = _midpoint(named.get("right_hand_index_mcp"), named.get("right_hand_pinky_mcp"))
+    wrist_l = _joint_angle(p.get(7), p.get(9), left_palm)
+    wrist_r = _joint_angle(p.get(8), p.get(10), right_palm)
 
     angles = {
         "neck": _neck_angle(shoulder_mid, ear_mid, hip_mid),
@@ -130,8 +148,8 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
     present = sum(value is not None for value in angles.values())
     angles.update(
         {
-            "wrist_l": 0.0,
-            "wrist_r": 0.0,
+            "wrist_l": wrist_l or 0.0,
+            "wrist_r": wrist_r or 0.0,
             "wrist_twist": 1,
             "neck_twist_bend": 0,
             "trunk_twist_bend": int(
@@ -146,6 +164,11 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
         key: round(float(value), 1) if isinstance(value, float) else value
         for key, value in angles.items()
     }
+    measured_wrists = sum(value is not None for value in (wrist_l, wrist_r))
+    limitations = ["2d_single_camera"]
+    if measured_wrists < 2:
+        limitations.append("wrist_landmarks_partial")
+    limitations.append("wrist_twist_requires_review")
     return {
         "angles": rounded,
         "quality": {
@@ -154,7 +177,8 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
             "required_components": 8,
             "keypoints_used": len(p),
             "confidence_threshold": threshold,
-            "limitations": ["2d_single_camera", "wrist_neutral_estimate"],
+            "wrist_components_measured": measured_wrists,
+            "limitations": limitations,
         },
     }
 
@@ -184,7 +208,10 @@ def calculate_reba(angles: dict[str, Any]) -> dict[str, Any]:
 
     upper_arm = clamp(max(_upper_arm_score(float(angles.get("ua_l") or 0)), _upper_arm_score(float(angles.get("ua_r") or 0))), 1, 6)
     lower_arm = 1 if all(60 <= float(angles.get(side) or 0) <= 100 for side in ("la_l", "la_r")) else 2
-    wrist = 1
+    wrist = max(
+        1 if float(angles.get("wrist_l") or 0) <= 15 else 2,
+        1 if float(angles.get("wrist_r") or 0) <= 15 else 2,
+    )
     score_b = TABLE_B_REBA[upper_arm - 1][lower_arm - 1][wrist - 1]
     score = TABLE_C_REBA[clamp(score_a, 1, 12) - 1][clamp(score_b, 1, 12) - 1]
     risk = "Negligible" if score == 1 else "Low" if score <= 3 else "Medium" if score <= 7 else "High" if score <= 10 else "Very High"
@@ -194,8 +221,18 @@ def calculate_reba(angles: dict[str, Any]) -> dict[str, Any]:
 def calculate_rula(angles: dict[str, Any]) -> dict[str, Any]:
     upper_arm = clamp(max(_upper_arm_score(float(angles.get("ua_l") or 0)), _upper_arm_score(float(angles.get("ua_r") or 0))), 1, 6)
     lower_arm = 1 if all(60 <= float(angles.get(side) or 0) <= 100 for side in ("la_l", "la_r")) else 2
-    wrist = 1
-    twist = 1
+    def wrist_score(value: float) -> int:
+        if value <= 5:
+            return 1
+        if value <= 15:
+            return 2
+        return 3
+
+    wrist = max(
+        wrist_score(float(angles.get("wrist_l") or 0)),
+        wrist_score(float(angles.get("wrist_r") or 0)),
+    )
+    twist = clamp(angles.get("wrist_twist", 1), 1, 2)
     score_a = TABLE_A_RULA[upper_arm - 1][lower_arm - 1][wrist - 1][twist - 1]
 
     neck = float(angles.get("neck") or 0)
@@ -208,7 +245,7 @@ def calculate_rula(angles: dict[str, Any]) -> dict[str, Any]:
     score_b = TABLE_B_RULA[neck_score - 1][trunk_score - 1][leg_score - 1]
     score = TABLE_C_RULA[clamp(score_a, 1, 8) - 1][clamp(score_b, 1, 7) - 1]
     risk = "Acceptable" if score <= 2 else "Further Investigate" if score <= 4 else "Investigate Soon" if score <= 6 else "Investigate Immediately"
-    return {"score": score, "risk": risk, "breakdown": {"score_a": score_a, "score_b": score_b, "ua_score": upper_arm, "la_score": lower_arm, "wrist_score": wrist, "neck_score": neck_score, "trunk_score": trunk_score, "leg_score": leg_score}}
+    return {"score": score, "risk": risk, "breakdown": {"score_a": score_a, "score_b": score_b, "ua_score": upper_arm, "la_score": lower_arm, "wrist_score": wrist, "twist_score": twist, "neck_score": neck_score, "trunk_score": trunk_score, "leg_score": leg_score}}
 
 
 def assess_pose(points: list[dict[str, Any]]) -> dict[str, Any]:

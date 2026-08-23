@@ -3,8 +3,11 @@ import unittest
 from edge_agent.ergonomics import assess_pose, calculate_pose_angles
 
 
-def point(point_id: int, x: float, y: float, score: float = 0.95) -> dict:
-    return {"id": point_id, "x": x, "y": y, "score": score}
+def point(point_id: int, x: float, y: float, score: float = 0.95, name: str | None = None) -> dict:
+    result = {"id": point_id, "x": x, "y": y, "score": score}
+    if name:
+        result["name"] = name
+    return result
 
 
 STANDING_POSE = [
@@ -46,6 +49,21 @@ class ErgonomicsTest(unittest.TestCase):
         self.assertEqual(result["quality"]["status"], "insufficient")
         self.assertIsNone(result["rula"])
         self.assertIsNone(result["reba"])
+
+    def test_hand_landmarks_drive_wrist_scores(self):
+        bent_wrist_pose = STANDING_POSE + [
+            point(105, 108, 150, name="left_hand_index_mcp"),
+            point(117, 108, 154, name="left_hand_pinky_mcp"),
+            point(205, 120, 178, name="right_hand_index_mcp"),
+            point(217, 116, 178, name="right_hand_pinky_mcp"),
+        ]
+
+        result = assess_pose(bent_wrist_pose)
+
+        self.assertGreater(result["angles"]["wrist_l"], 70)
+        self.assertEqual(result["quality"]["wrist_components_measured"], 2)
+        self.assertEqual(result["rula"]["breakdown"]["wrist_score"], 3)
+        self.assertEqual(result["reba"]["breakdown"]["wrist_score"], 2)
 
 
 if __name__ == "__main__":

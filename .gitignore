@@ -9,4 +9,6 @@ __pycache__/
 data/
 logs/
 *.db
-
+graphify-out/
+models/*.hef
+models/*.tflite

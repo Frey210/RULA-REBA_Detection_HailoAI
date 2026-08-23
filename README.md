@@ -57,6 +57,17 @@ export EDGE_HAILO_MODEL=/usr/local/hailo/resources/models/hailo8/yolov8m_pose.he
 
 Use `python -m edge_agent.fake_detection` only as a development fallback without Hailo hardware.
 
+The RULA/REBA wrist component uses the lightweight MediaPipe hand landmark model in addition to Hailo COCO17 body pose. Install it once in the Hailo application environment:
+
+```bash
+mkdir -p models
+/home/admin/hailo-apps/venv_hailo_apps/bin/pip install ai-edge-litert==2.2.0
+curl -L -o models/hand_landmark_lite.tflite \
+  https://storage.googleapis.com/mediapipe-assets/hand_landmark_lite.tflite
+```
+
+The hand model runs only on wrist crops at `EDGE_HAND_LANDMARK_FPS` (default 3 FPS). Wrist flexion/extension feeds automatic RULA and REBA scoring; wrist twist remains a manual review input because a single 2D camera cannot measure axial rotation reliably.
+
 ## Soft Worker Re-Identification
 
 The pose pipeline combines the Hailo tracking ID with a lightweight HSV torso
