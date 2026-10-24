@@ -250,7 +250,7 @@ class PoseFrameWorker:
                  "frame_id": frame_id, "detections": detections}
         payload = {**event, "width": frame.shape[1], "height": frame.shape[0],
                    "captured_monotonic": captured_at, "dropped_frames": self.dropped}
-        write_frame(Image.fromarray(frame), payload)
+        write_frame(Image.fromarray(frame), payload, data_dir=data.data_dir)
         if now - data.last_event_publish >= data.event_interval:
             data.publisher.publish(event)
             data.last_event_publish = now

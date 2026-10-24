@@ -1,4 +1,6 @@
 import time
+import subprocess
+import sys
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -34,13 +36,30 @@ def test_frame_and_overlay_are_one_record_and_buffer_is_bounded(tmp_path, monkey
         frame_store.write_frame(Image.new("RGB", (16, 16), (frame_id, 0, 0)), {
             "run_id": run, "frame_id": frame_id, "captured_monotonic": time.monotonic(),
             "timestamp": 1234, "detections": [{"worker_id": str(frame_id)}],
-        })
+        }, data_dir=tmp_path)
     assert frame_store.read_frame(run, 0) is None
     image, metadata = frame_store.read_frame()
     assert metadata["frame_id"] == frame_store.MAX_FRAMES
     assert metadata["detections"][0]["worker_id"] == str(frame_store.MAX_FRAMES)
     assert len(list((tmp_path / "frames").glob("*.jpg"))) == frame_store.MAX_FRAMES
     assert frame_store.read_frame("../../outside", 1) is None
+
+
+def test_hailo_frame_writer_does_not_import_agent_settings(tmp_path):
+    subprocess.run([sys.executable, "-c", """
+import sys, time
+from pathlib import Path
+from uuid import uuid4
+sys.modules['pydantic_settings'] = None
+sys.modules['edge_agent.config'] = None
+from PIL import Image
+from edge_agent.frame_store import write_frame
+write_frame(Image.new('RGB', (16, 16)), {
+    'run_id': str(uuid4()), 'frame_id': 1,
+    'captured_monotonic': time.monotonic(), 'timestamp': 1,
+}, data_dir=Path(sys.argv[1]))
+""", str(tmp_path)], check=True, timeout=10)
+    assert (tmp_path / "latest_frame.json").is_file()
 
 
 def test_disconnected_camera_cannot_return_cached_image(monkeypatch):
