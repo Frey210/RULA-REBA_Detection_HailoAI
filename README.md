@@ -2,6 +2,21 @@
 
 Edge node software for Raspberry Pi 5 + Hailo-8.
 
+## Offline Session Clock
+
+Authenticated `/detection/start` accepts `backend_timestamp_ms` from the owning
+desktop backend. Capture timestamps advance from that UTC anchor using the Pi's
+monotonic clock, including processing time since the start request arrived.
+The event header records `clock_source: backend_session_clock`. Legacy callers
+without an anchor remain explicitly marked `device_clock`.
+
+This does not change the OS clock, NTP, EEPROM, pairing, or camera configuration.
+Frame freshness and the 25-second lease remain monotonic; the backend still
+rejects stale data. The anchor includes one-way LAN delay and is not a calibrated
+cross-camera synchronization measurement. Keep the laptop clock correct; restart
+the session after a large laptop time adjustment. Hardware multi-Pi and long-run
+acceptance remain separate from the clock unit tests.
+
 Current scope:
 
 - Lightweight local edge agent.

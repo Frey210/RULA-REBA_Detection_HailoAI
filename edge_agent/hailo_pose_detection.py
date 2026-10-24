@@ -16,6 +16,7 @@ from edge_agent.ergonomics import calculate_pose_angles
 from edge_agent.hand_landmarks import HandLandmarkDetector
 from edge_agent.soft_reid import SoftReIdentifier
 from edge_agent.frame_store import write_frame
+from edge_agent.capture_clock import CaptureClock
 
 
 COCO_KEYPOINTS = [
@@ -92,6 +93,7 @@ class EventPublisher:
 
 class PoseCallbackData:
     def __init__(self, base_class, publisher: EventPublisher, data_dir: Path) -> None:
+        self.clock = CaptureClock.from_environment()
         self._base = base_class()
         self.publisher = publisher
         self.data_dir = data_dir
@@ -245,6 +247,7 @@ class PoseFrameWorker:
             data.signature_cache.pop(track, None)
             data.last_signature_at.pop(track, None)
         event = {"schema_version": "1.1", "event_type": "detection",
+                 "clock_source": data.clock.source,
                  "session_id": os.environ["EDGE_SESSION_ID"], "run_id": os.environ["EDGE_RUN_ID"],
                  "cam_id": os.environ.get("EDGE_CAM_ID", "CAM_01"), "timestamp": timestamp,
                  "frame_id": frame_id, "detections": detections}
@@ -271,7 +274,7 @@ def build_callback(hailo, get_caps_from_pad, get_numpy_from_buffer):
         if clock and buffer.pts < 2**63:
             age = max(0.0, (clock.get_time() - element.get_base_time() - buffer.pts) / 1e9)
         captured_at = time.monotonic() - age
-        timestamp = int((time.time() - age) * 1000)
+        timestamp = user_data.clock.timestamp_ms(captured_at)
         raw = []
         for detection in hailo.get_roi_from_buffer(buffer).get_objects_typed(hailo.HAILO_DETECTION):
             if detection.get_label() != "person":

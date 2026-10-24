@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class PairingInfo(BaseModel):
@@ -26,6 +26,7 @@ class DetectionStartRequest(BaseModel):
     session_id: str
     backend_url: str | None = None
     run_id: str
+    backend_timestamp_ms: int | None = Field(default=None, gt=0)
 
 
 class DetectionStatusResponse(BaseModel):

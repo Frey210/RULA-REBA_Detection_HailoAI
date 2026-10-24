@@ -6,6 +6,9 @@ from urllib.parse import urlparse
 
 import httpx
 import websockets
+from edge_agent.capture_clock import CaptureClock
+
+capture_clock = CaptureClock.from_environment()
 
 
 def websocket_url(backend_url: str, cam_id: str) -> str:
@@ -70,7 +73,8 @@ def fake_event(session_id: str, cam_id: str, frame_id: int) -> dict:
         "event_type": "detection",
         "cam_id": cam_id,
         "session_id": session_id,
-        "timestamp": int(time.time() * 1000),
+        "timestamp": capture_clock.timestamp_ms(time.monotonic()),
+        "clock_source": capture_clock.source,
         "frame_id": frame_id,
         "run_id": os.environ["EDGE_RUN_ID"],
         "detections": fake_detections(frame_id),

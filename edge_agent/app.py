@@ -24,6 +24,7 @@ from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
 from edge_agent.camera_source import camera_manager, camera_status
 from edge_agent.overlay_store import write_latest_overlay
 from edge_agent.frame_store import read_frame
+from edge_agent.capture_clock import CaptureClock
 
 app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.2.0")
 app.add_middleware(
@@ -142,6 +143,8 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
 
 @app.post("/detection/start", response_model=DetectionStatusResponse)
 def start_detection(payload: DetectionStartRequest) -> DetectionStatusResponse:
+    received_monotonic = time.monotonic()
+    received_utc_ms = int(time.time() * 1000)
     require_paired()
     state = edge_state.read()
 
@@ -151,7 +154,9 @@ def start_detection(payload: DetectionStartRequest) -> DetectionStatusResponse:
         raise HTTPException(503, "Camera is unavailable. Connect the USB camera and try again.")
     camera_manager.pause_for_detection()
     try:
-        status = detection_manager.start(payload.session_id, backend_url, payload.run_id)
+        clock = CaptureClock(payload.backend_timestamp_ms or received_utc_ms, received_monotonic,
+                             "backend_session_clock" if payload.backend_timestamp_ms else "device_clock")
+        status = detection_manager.start(payload.session_id, backend_url, payload.run_id, clock)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     deadline = time.monotonic() + 12

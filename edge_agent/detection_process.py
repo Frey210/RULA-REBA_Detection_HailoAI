@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 
 from edge_agent.config import settings
+from edge_agent.capture_clock import CaptureClock
 
 
 @dataclass
@@ -44,11 +45,11 @@ class DetectionProcessManager:
                                    settings.edge_detection_command, self.session_id, self.run_id,
                                    running and age is not None and age < 2500, age)
 
-    def start(self, session_id: str, backend_url: str, run_id: str) -> DetectionStatus:
+    def start(self, session_id: str, backend_url: str, run_id: str, clock: CaptureClock | None = None) -> DetectionStatus:
         with self.lock:
-            return self._start(session_id, backend_url, run_id)
+            return self._start(session_id, backend_url, run_id, clock)
 
-    def _start(self, session_id: str, backend_url: str, run_id: str) -> DetectionStatus:
+    def _start(self, session_id: str, backend_url: str, run_id: str, clock: CaptureClock | None = None) -> DetectionStatus:
         current = self.status()
         if current.running:
             if (session_id, run_id) != (self.session_id, self.run_id):
@@ -60,6 +61,7 @@ class DetectionProcessManager:
             return DetectionStatus(False, None, "")
 
         from edge_agent.state import edge_state
+        clock = clock or CaptureClock(int(time.time() * 1000), time.monotonic())
         self.session_id, self.run_id = session_id, run_id
         self.lease_until = time.monotonic() + 25
         env = {
@@ -67,6 +69,9 @@ class DetectionProcessManager:
             "EDGE_SESSION_ID": session_id,
             "EDGE_RUN_ID": run_id,
             "EDGE_DEVICE_TOKEN": edge_state.read().get("device_token", ""),
+            "EDGE_CLOCK_UTC_MS": str(clock.utc_ms),
+            "EDGE_CLOCK_MONOTONIC_S": str(clock.monotonic_s),
+            "EDGE_CLOCK_SOURCE": clock.source,
             "EDGE_BACKEND_URL": backend_url,
             "EDGE_CAM_ID": settings.edge_cam_id,
             "EDGE_DATA_DIR": str(settings.edge_data_dir),
