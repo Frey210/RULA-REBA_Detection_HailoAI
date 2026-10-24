@@ -11,6 +11,24 @@ Current scope:
 
 The heavy Hailo pose pipeline is intentionally not started on boot. The Raspberry Pi should run only the lightweight agent until an authenticated desktop/backend session starts detection.
 
+## Protocol 0.2.0
+
+Update the desktop/backend together with this edge release, then pair legacy
+devices once more. Pairing supplies a persistent device ID and a per-device
+Bearer credential. All control, network, video, and snapshot routes require that
+credential; only health and discovery remain public. The desktop keeps the
+credential on the backend, not in stream URLs.
+
+Each detection carries a unique `run_id` and source `frame_id`. Startup waits for
+the first recent frame; the backend renews `/detection/lease` while the session is
+active. Inference stops after 25 seconds without renewal. Evidence is retrieved
+from `/snapshot/frames/{frame_id}?run_id=...`; an expired frame returns 410 rather
+than substituting a newer image. The frame buffer holds at most 36 records.
+
+Hailo callback processing uses a one-frame handoff, bounded source queues, and an
+explicit source FPS cap. Wrist measurements that cannot be observed remain null.
+Hardware latency and long-session tests are still required on the target Pi.
+
 ## Local Agent
 
 Default local API:

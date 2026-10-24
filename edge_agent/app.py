@@ -22,10 +22,10 @@ from edge_agent.schemas import (
 from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
 from edge_agent.camera_source import camera_manager, camera_status
-from edge_agent.overlay_store import read_latest_overlay, write_latest_overlay
+from edge_agent.overlay_store import write_latest_overlay
 from edge_agent.frame_store import read_frame
 
-app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.1.0")
+app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -113,7 +113,7 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
         "hostname": socket.gethostname(),
         "device_type": "raspberry_pi_5_hailo8",
         "metadata": {
-            "agent_version": "0.1.0",
+            "agent_version": "0.2.0",
             "edge_base_url": payload.edge_base_url,
             "paired_at": datetime.now(UTC).isoformat(),
         },
@@ -197,7 +197,8 @@ def stream_status() -> dict:
     if not status.running:
         camera_manager.resume_preview()
     source_status = camera_status()
-    overlay_payload = read_latest_overlay()
+    recorded = read_frame() if status.running else None
+    overlay_payload = recorded[1] if recorded else None
     return {
         "available": source_status["camera_available"],
         "running": status.running,

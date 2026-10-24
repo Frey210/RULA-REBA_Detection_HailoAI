@@ -105,7 +105,7 @@ class CameraManager:
                 "source": "hailo",
                 "camera_available": True,
                 "detail": "Frames supplied by Hailo pose pipeline",
-                "frame_count": self.frame_count,
+                "frame_count": frame[1]["frame_id"],
                 "frame_age_ms": round(inference_age * 1000),
             }
         self.ensure_started()

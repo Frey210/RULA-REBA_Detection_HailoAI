@@ -152,9 +152,7 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
             "wrist_r": wrist_r,
             "wrist_twist": 1,
             "neck_twist_bend": 0,
-            "trunk_twist_bend": int(
-                angles["trunk"] is not None and float(angles["trunk"]) > 10
-            ),
+            "trunk_twist_bend": 0,
             "ua_l_mod": 0,
             "ua_r_mod": 0,
             "is_lifting": 0,
@@ -169,6 +167,7 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
     if measured_wrists < 2:
         limitations.append("wrist_landmarks_partial")
     limitations.append("wrist_twist_requires_review")
+    limitations.append("trunk_twist_requires_review")
     return {
         "angles": rounded,
         "quality": {
