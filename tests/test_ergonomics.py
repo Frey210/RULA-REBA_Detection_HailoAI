@@ -32,7 +32,8 @@ STANDING_POSE = [
 class ErgonomicsTest(unittest.TestCase):
     def test_standing_pose_has_complete_measurements(self):
         result = calculate_pose_angles(STANDING_POSE)
-        self.assertEqual(result["quality"]["status"], "good")
+        self.assertEqual(result["quality"]["status"], "partial")
+        self.assertIsNone(result["angles"]["wrist_l"])
         self.assertEqual(result["quality"]["measured_components"], 8)
         self.assertLess(result["angles"]["neck"], 1)
         self.assertLess(result["angles"]["trunk"], 1)

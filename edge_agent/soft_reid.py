@@ -10,6 +10,7 @@ class Identity:
     last_seen: float
     active_track_id: int | None = None
     missing_since: float | None = None
+    bbox: list[float] | None = None
 
 
 class SoftReIdentifier:
@@ -51,6 +52,7 @@ class SoftReIdentifier:
         signature: list[float] | None,
         *,
         now: float | None = None,
+        bbox: list[float] | None = None,
     ) -> tuple[str, float, str]:
         now = time.monotonic() if now is None else now
         self._expire_tracks(now)
@@ -61,14 +63,16 @@ class SoftReIdentifier:
             identity.last_seen = now
             identity.active_track_id = track_id
             identity.missing_since = None
+            identity.bbox = bbox
             if signature:
                 similarity = cosine_similarity(identity.signature, signature)
                 if similarity >= self.similarity_threshold - 0.1:
                     identity.signature = blend_signatures(identity.signature, signature, alpha=0.08)
-            return current_worker, 1.0, "tracked"
+            return current_worker, 0.0, "tracked"
 
         best_identity = None
         best_similarity = -1.0
+        second_similarity = -1.0
         if signature:
             for identity in self.identities.values():
                 if identity.active_track_id is not None and identity.missing_since is None:
@@ -76,16 +80,24 @@ class SoftReIdentifier:
                 if now - identity.last_seen > self.ttl_seconds:
                     continue
                 similarity = cosine_similarity(identity.signature, signature)
+                if bbox and identity.bbox and now - identity.last_seen < self.track_grace_seconds:
+                    overlap = bbox_overlap(identity.bbox, bbox)
+                    if overlap > 0.5:
+                        similarity = max(similarity, 0.9)
                 if similarity > best_similarity:
+                    second_similarity = best_similarity
                     best_identity = identity
                     best_similarity = similarity
+                else:
+                    second_similarity = max(second_similarity, similarity)
 
-        if best_identity and best_similarity >= self.similarity_threshold:
+        if best_identity and best_similarity >= self.similarity_threshold and best_similarity - second_similarity >= 0.08:
             if best_identity.active_track_id is not None:
                 self.track_to_worker.pop(best_identity.active_track_id, None)
             best_identity.active_track_id = track_id
             best_identity.last_seen = now
             best_identity.missing_since = None
+            best_identity.bbox = bbox
             best_identity.signature = blend_signatures(best_identity.signature, signature or [], alpha=0.08)
             self.track_to_worker[track_id] = best_identity.worker_id
             return best_identity.worker_id, best_similarity, "reacquired"
@@ -97,15 +109,25 @@ class SoftReIdentifier:
             signature=signature or [],
             last_seen=now,
             active_track_id=track_id,
+            bbox=bbox,
         )
         self.track_to_worker[track_id] = worker_id
-        return worker_id, 1.0 if signature else 0.0, "new"
+        return worker_id, 0.0, "unconfirmed"
 
     def _expire_tracks(self, now: float) -> None:
-        for identity in self.identities.values():
+        for worker_id, identity in list(self.identities.items()):
             if identity.active_track_id is not None and now - identity.last_seen > self.ttl_seconds:
                 self.track_to_worker.pop(identity.active_track_id, None)
                 identity.active_track_id = None
+            if now - identity.last_seen > self.ttl_seconds and identity.active_track_id is None:
+                self.identities.pop(worker_id, None)
+
+
+def bbox_overlap(left: list[float], right: list[float]) -> float:
+    width = max(0, min(left[0] + left[2], right[0] + right[2]) - max(left[0], right[0]))
+    height = max(0, min(left[1] + left[3], right[1] + right[3]) - max(left[1], right[1]))
+    intersection = width * height
+    return intersection / max(1, left[2] * left[3] + right[2] * right[3] - intersection)
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:

@@ -1,8 +1,10 @@
 import socket
+import hmac
+import time
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -21,6 +23,7 @@ from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
 from edge_agent.camera_source import camera_manager, camera_status
 from edge_agent.overlay_store import read_latest_overlay, write_latest_overlay
+from edge_agent.frame_store import read_frame
 
 app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.1.0")
 app.add_middleware(
@@ -30,6 +33,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def device_auth(request: Request, call_next):
+    public = request.url.path in {"/health", "/pairing/info"} or request.method == "OPTIONS"
+    state = edge_state.read()
+    token = state.get("device_token")
+    if not public and (request.url.path != "/pairing/complete" or token):
+        supplied = request.headers.get("authorization", "").removeprefix("Bearer ")
+        if not token or not hmac.compare_digest(supplied, token):
+            return Response("Pair this device again from its owning account", status_code=403,
+                            headers={"X-Device-Id": edge_state.device_id()})
+    response = await call_next(request)
+    response.headers["X-Device-Id"] = edge_state.device_id()
+    return response
 
 
 @app.on_event("shutdown")
@@ -51,6 +69,7 @@ def pairing_info() -> PairingInfo:
         hostname=socket.gethostname(),
         status="running" if detection_manager.status().running else "idle",
         paired=bool(state.get("paired")),
+        device_id=edge_state.device_id(),
     )
 
 
@@ -90,6 +109,7 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
     request_payload = {
         "pairing_code": payload.pairing_code,
         "cam_id": settings.edge_cam_id,
+        "device_id": edge_state.device_id(),
         "hostname": socket.gethostname(),
         "device_type": "raspberry_pi_5_hailo8",
         "metadata": {
@@ -113,6 +133,7 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
             "paired": True,
             "cam_id": settings.edge_cam_id,
             "backend_url": backend_url,
+            "device_token": response.json()["device_token"],
             "paired_at": datetime.now(UTC).isoformat(),
         }
     )
@@ -125,11 +146,34 @@ def start_detection(payload: DetectionStartRequest) -> DetectionStatusResponse:
     state = edge_state.read()
 
     backend_url = payload.backend_url or state.get("backend_url") or settings.edge_backend_url
+    current = detection_manager.status()
+    if not current.running and not camera_status()["camera_available"]:
+        raise HTTPException(503, "Camera is unavailable. Connect the USB camera and try again.")
     camera_manager.pause_for_detection()
-    status = detection_manager.start(payload.session_id, backend_url)
+    try:
+        status = detection_manager.start(payload.session_id, backend_url, payload.run_id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    deadline = time.monotonic() + 12
+    while status.running and not status.ready and time.monotonic() < deadline:
+        time.sleep(0.1)
+        status = detection_manager.status()
+    if not status.ready:
+        detection_manager.stop()
+        camera_manager.resume_preview()
+        raise HTTPException(503, "Pose pipeline did not produce a recent frame. Check the camera and Hailo runtime.")
     if not status.running:
         camera_manager.resume_preview()
     return DetectionStatusResponse(**status.__dict__)
+
+
+@app.post("/detection/lease")
+def renew_detection(payload: DetectionStartRequest) -> dict:
+    try:
+        detection_manager.renew(payload.session_id, payload.run_id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"lease_seconds": 25}
 
 
 @app.post("/detection/stop", response_model=DetectionStatusResponse)
@@ -155,10 +199,13 @@ def stream_status() -> dict:
     source_status = camera_status()
     overlay_payload = read_latest_overlay()
     return {
-        "available": True,
+        "available": source_status["camera_available"],
         "running": status.running,
         "cam_id": settings.edge_cam_id,
         **source_status,
+        "session_id": status.session_id,
+        "run_id": status.run_id,
+        "ready": status.ready,
         "overlay_available": overlay_payload is not None,
         "recommended": {
             "width": 640,
@@ -203,6 +250,18 @@ def snapshot_latest(
         media_type="image/jpeg",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/snapshot/frames/{frame_id}")
+def snapshot_source(frame_id: int, run_id: str, overlay: bool = True) -> Response:
+    frame = read_frame(run_id, frame_id, max_age=None)
+    if frame is None:
+        raise HTTPException(410, "The requested source frame is no longer buffered")
+    content = snapshot_jpeg(run_id=run_id, frame_id=frame_id, overlay=overlay)
+    if content is None:
+        raise HTTPException(410, "Source frame expired")
+    return Response(content, media_type="image/jpeg", headers={"Cache-Control": "no-store",
+                    "X-Frame-Id": str(frame_id), "X-Run-Id": run_id})
 
 
 @app.post("/overlay/latest")

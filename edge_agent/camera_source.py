@@ -57,7 +57,13 @@ class CameraManager:
         self.stop_event.set()
         if self.thread:
             self.thread.join(timeout=2)
+            if self.thread.is_alive():
+                raise RuntimeError("Camera reader did not release the device")
         self.thread = None
+        with self.lock:
+            self.latest_frame = None
+            self.latest_frame_at = 0.0
+            self.opened = False
 
     def pause_for_detection(self) -> None:
         self.paused_for_detection = True
@@ -76,7 +82,7 @@ class CameraManager:
             return inference_frame
         self.ensure_started()
         with self.lock:
-            if self.latest_frame is None:
+            if self.latest_frame is None or not self.opened or time.monotonic() - self.latest_frame_at > 2.5:
                 return None
             frame = self.latest_frame.copy()
         if frame.size != (width, height):
@@ -84,21 +90,16 @@ class CameraManager:
         return frame
 
     def _read_inference_frame(self) -> Image.Image | None:
-        path = settings.edge_data_dir / "latest_inference_frame.jpg"
-        try:
-            if time.time() - path.stat().st_mtime > 3:
-                return None
-            with Image.open(path) as image:
-                return image.convert("RGB")
-        except (FileNotFoundError, OSError):
+        if not self.paused_for_detection:
             return None
+        from edge_agent.frame_store import read_frame
+        frame = read_frame()
+        return frame[0] if frame else None
 
     def status(self) -> dict:
-        inference_frame = settings.edge_data_dir / "latest_inference_frame.jpg"
-        try:
-            inference_age = time.time() - inference_frame.stat().st_mtime
-        except OSError:
-            inference_age = None
+        from edge_agent.frame_store import read_frame
+        frame = read_frame() if self.paused_for_detection else None
+        inference_age = time.monotonic() - frame[1]["captured_monotonic"] if frame else None
         if self.paused_for_detection and inference_age is not None and inference_age < 3:
             return {
                 "source": "hailo",

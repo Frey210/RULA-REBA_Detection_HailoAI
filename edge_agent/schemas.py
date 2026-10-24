@@ -7,6 +7,7 @@ class PairingInfo(BaseModel):
     hostname: str
     status: str
     paired: bool
+    device_id: str
 
 
 class PairingCompleteRequest(BaseModel):
@@ -24,12 +25,17 @@ class PairingCompleteResponse(BaseModel):
 class DetectionStartRequest(BaseModel):
     session_id: str
     backend_url: str | None = None
+    run_id: str
 
 
 class DetectionStatusResponse(BaseModel):
     running: bool
     pid: int | None
     command: str
+    session_id: str | None = None
+    run_id: str | None = None
+    ready: bool = False
+    frame_age_ms: int | None = None
 
 
 class WifiConnectRequest(BaseModel):

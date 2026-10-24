@@ -72,6 +72,7 @@ def fake_event(session_id: str, cam_id: str, frame_id: int) -> dict:
         "session_id": session_id,
         "timestamp": int(time.time() * 1000),
         "frame_id": frame_id,
+        "run_id": os.environ["EDGE_RUN_ID"],
         "detections": fake_detections(frame_id),
     }
 
@@ -86,11 +87,13 @@ async def stream_events() -> None:
 
     while True:
         try:
-            async with websockets.connect(url) as websocket, httpx.AsyncClient(timeout=1) as client:
+            headers = {"Authorization": "Bearer " + os.getenv("EDGE_DEVICE_TOKEN", "")}
+            async with websockets.connect(url, additional_headers=headers) as websocket, httpx.AsyncClient(timeout=1, headers=headers) as client:
                 print(f"fake detection connected to {url} for {session_id} on {cam_id}", flush=True)
                 while True:
                     frame_id += 1
                     await websocket.send(json.dumps(fake_event(session_id, cam_id, frame_id)))
+                    await websocket.recv()
                     try:
                         await client.post(overlay_url, json=fake_overlay(frame_id))
                     except httpx.HTTPError as exc:

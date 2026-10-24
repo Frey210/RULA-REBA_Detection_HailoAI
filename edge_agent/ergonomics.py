@@ -148,8 +148,8 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
     present = sum(value is not None for value in angles.values())
     angles.update(
         {
-            "wrist_l": wrist_l or 0.0,
-            "wrist_r": wrist_r or 0.0,
+            "wrist_l": wrist_l,
+            "wrist_r": wrist_r,
             "wrist_twist": 1,
             "neck_twist_bend": 0,
             "trunk_twist_bend": int(
@@ -172,7 +172,7 @@ def calculate_pose_angles(points: list[dict[str, Any]], threshold: float = 0.35)
     return {
         "angles": rounded,
         "quality": {
-            "status": "good" if present == 8 else "partial" if present >= 5 else "insufficient",
+            "status": "good" if present == 8 and measured_wrists == 2 else "partial" if present >= 5 else "insufficient",
             "measured_components": present,
             "required_components": 8,
             "keypoints_used": len(p),

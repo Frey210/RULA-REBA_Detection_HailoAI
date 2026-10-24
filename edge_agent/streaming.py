@@ -10,22 +10,26 @@ from edge_agent.detection_process import detection_manager
 from edge_agent.config import settings
 from edge_agent.camera_source import camera_manager
 from edge_agent.overlay_store import read_latest_overlay
+from edge_agent.frame_store import read_frame
 
 
 def snapshot_jpeg(
-    *, width: int = 640, height: int = 360, quality: int = 76, overlay: bool = True
+    *, width: int = 640, height: int = 360, quality: int = 82, overlay: bool = True,
+    run_id: str | None = None, frame_id: int | None = None,
 ) -> bytes | None:
     width = min(max(width, 320), 960)
     height = min(max(height, 180), 540)
     quality = min(max(quality, 45), 90)
-    frame = camera_manager.read(width, height)
+    recorded = read_frame(run_id, frame_id, max_age=None if run_id else 2.5) if run_id or camera_manager.paused_for_detection else None
+    frame = recorded[0] if recorded else camera_manager.read(width, height) if not run_id else None
     if frame is None:
         return None
     image = render_camera_frame(
         frame,
-        int(time.time() * 1000) % 1_000_000,
+        recorded[1]["frame_id"] if recorded else 0,
         overlay=overlay,
-        running=detection_manager.status().running,
+        running=bool(recorded) or detection_manager.status().running,
+        payload=recorded[1] if recorded else {},
     )
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=quality, optimize=True)
@@ -51,14 +55,16 @@ def mjpeg_frames(
         started_at = time.monotonic()
         running = detection_manager.status().running
         frame_id += 1
-        frame = camera_manager.read(width, height)
-        if frame is None:
-            image = render_frame(width, height, frame_id, overlay=overlay, running=running)
-        else:
-            image = render_camera_frame(frame, frame_id, overlay=overlay, running=running)
-        buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=quality)
-        jpeg = buffer.getvalue()
+        jpeg = snapshot_jpeg(width=width, height=height, quality=quality, overlay=overlay)
+        if jpeg is None:
+            if settings.edge_stream_source == "demo":
+                image = render_frame(width, height, frame_id, overlay=overlay, running=running)
+            else:
+                image = Image.new("RGB", (width, height), (18, 24, 27))
+                ImageDraw.Draw(image).text((20, height // 2), "Camera unavailable - reconnect the camera", fill="white")
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=quality)
+            jpeg = buffer.getvalue()
         yield (
             b"--frame\r\n"
             b"Content-Type: image/jpeg\r\n"
@@ -71,7 +77,7 @@ def mjpeg_frames(
         time.sleep(max(0, frame_interval - elapsed))
 
 
-def render_camera_frame(frame: Image.Image, frame_id: int, *, overlay: bool, running: bool) -> Image.Image:
+def render_camera_frame(frame: Image.Image, frame_id: int, *, overlay: bool, running: bool, payload: dict | None = None) -> Image.Image:
     image = frame.convert("RGB")
     width, height = image.size
     draw = ImageDraw.Draw(image)
@@ -80,7 +86,7 @@ def render_camera_frame(frame: Image.Image, frame_id: int, *, overlay: bool, run
     status = "RUNNING" if running else "IDLE"
     draw.text((12, 11), f"{settings.edge_cam_id}  CAMERA  {status}  {width}x{height}", fill=(245, 250, 249), font=font)
     if overlay and running:
-        overlay_payload = read_latest_overlay()
+        overlay_payload = payload if payload is not None else read_latest_overlay()
         if overlay_payload:
             draw_detection_overlay(draw, width, height, overlay_payload)
         else:
