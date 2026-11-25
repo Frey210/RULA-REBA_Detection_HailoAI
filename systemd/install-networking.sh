@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Separate direct cables must not advertise the same subnet on multiple laptop ports.
-cam_id="${EDGE_CAM_ID:-$(sed -n 's/^EDGE_CAM_ID=//p' "$repo/.env" 2>/dev/null | tail -1)}"
+cam_id="${EDGE_CAM_ID:-$(sed -n 's/^EDGE_CAM_ID=//p' "$repo/.env" 2>/dev/null | tail -1 || true)}"
 cam_id="${cam_id:-CAM_01}"
 if [[ ! "$cam_id" =~ ^CAM_([0-9]{1,3})$ ]]; then
   printf 'EDGE_CAM_ID must be CAM_01 through CAM_254\n' >&2
@@ -15,7 +15,7 @@ if ((camera_number < 1 || camera_number > 254)); then
   exit 1
 fi
 direct_address="${EDGE_DIRECT_LAN_ADDRESS:-10.55.$camera_number.1/24}"
-direct_prefix=$(python3 -c 'import ipaddress,sys; a=ipaddress.IPv4Interface(sys.argv[1]); assert a.is_private and a.network.prefixlen == 24 and int(a.ip) % 256 == 1, "Use a private IPv4 .1/24 address"; print(str(a.ip).rsplit(".",1)[0])' "$direct_address")
+direct_prefix=$(python3 -c 'import ipaddress,sys; a=ipaddress.IPv4Interface(sys.argv[1]); private=any(a.ip in ipaddress.IPv4Network(n) for n in ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16")); assert private and a.network.prefixlen == 24 and int(a.ip) % 256 == 1, "Use an RFC1918 IPv4 .1/24 address"; print(str(a.ip).rsplit(".",1)[0])' "$direct_address")
 if [[ "${1:-}" == '--print-direct-lan' ]]; then
   printf '%s\n%s\n' "$direct_address" "$direct_prefix"
   exit 0

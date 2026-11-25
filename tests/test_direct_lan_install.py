@@ -17,6 +17,8 @@ import pytest
     ('other', '', None),
     ('CAM_02', '10.55.2.10/24', None),
     ('CAM_02', '8.8.8.1/24', None),
+    ('CAM_02', '127.0.0.1/24', None),
+    ('CAM_02', '169.254.1.1/24', None),
 ])
 def test_direct_lan_install_address(cam_id, override, expected):
     git_bash = Path('C:/Program Files/Git/bin/bash.exe')
