@@ -8,7 +8,7 @@
          vma = find_vma(current->mm, addr_or_fd);
          if (IS_ENABLED(HAILO_SUPPORT_MMIO_DMA_MAPPING)) {
              if (NULL == vma) {
-@@ -174,6 +175,7 @@
+@@ -174,5 +175,6 @@
                  dev_err(dev, "no vma for virt_addr/size = 0x%08lx/0x%08zx\n", addr_or_fd, size);
                  ret = -EFAULT;
 +                mmap_read_unlock(current->mm);
