@@ -74,7 +74,11 @@ Install direct-LAN DHCP and the fallback setup hotspot once on the Raspberry Pi:
 sudo ./systemd/install-networking.sh
 ```
 
-Direct LAN uses `10.55.0.1/24` and gives the laptop an address without advertising a default gateway or DNS server, so the laptop keeps using Wi-Fi for internet. If no saved Wi-Fi connects within 60 seconds, the Pi starts `ERGoSIGHT-CAM01` at `10.42.0.1`. The installer prints the generated WPA2 password that must be placed on the device label.
+Direct LAN uses a separate subnet per technical camera ID: `CAM_01` uses `10.55.1.1/24`, `CAM_02` uses `10.55.2.1/24`, and `CAM_03` uses `10.55.3.1/24`. The installer reads `EDGE_CAM_ID` from the environment or the repository `.env`. Provision every camera with a unique technical ID. An explicit `EDGE_DIRECT_LAN_ADDRESS` environment variable overrides the default (private IPv4 ending in `.1/24`). Check without changing networking with `./systemd/install-networking.sh --print-direct-lan`.
+
+The Pi gives the laptop an address without advertising a default gateway or DNS server, so Wi-Fi remains available for internet. Legacy devices used the same `10.55.0.1/24`; migrate them before connecting several direct LAN cables. After migration, renew the laptop DHCP lease, then run Scan LAN to refresh stored device URLs. Do not remove device ownership or reset pairing. These DHCP profiles are for separate direct cables, not several DHCP servers on one switch; use router DHCP for a shared LAN.
+
+If no saved Wi-Fi connects within 60 seconds, the Pi starts its setup hotspot at `10.42.0.1`. Set `EDGE_HOTSPOT_SSID` uniquely per device when provisioning. The installer prints the generated WPA2 password that must be placed on the device label.
 
 ## Development
 

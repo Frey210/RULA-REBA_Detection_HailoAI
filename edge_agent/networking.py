@@ -57,7 +57,7 @@ def network_status() -> dict[str, Any]:
         "ethernet": ethernet,
         "hotspot": wlan["connection"] == settings.edge_hotspot_connection,
         "hotspot_ssid": settings.edge_hotspot_ssid,
-        "direct_lan_address": settings.edge_direct_lan_address,
+        "direct_lan_address": ethernet["address"] or settings.edge_direct_lan_address,
         "provisioning": provisioning,
     }
 
