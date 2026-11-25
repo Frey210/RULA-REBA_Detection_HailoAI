@@ -126,6 +126,8 @@ def set_ethernet(payload: EthernetModeRequest, background_tasks: BackgroundTasks
 @app.post('/network/ethernet/confirm')
 def confirm_ethernet(request: Request) -> dict:
     require_paired()
+    if detection_manager.status().running:
+        raise HTTPException(409, 'Stop detection before confirming network changes')
     status = network_status()
     ethernet_ip = str(status['ethernet'].get('address') or '').split('/')[0]
     server_ip = (request.scope.get('server') or ('', 0))[0]
@@ -200,6 +202,8 @@ def start_detection(payload: DetectionStartRequest) -> DetectionStatusResponse:
     received_monotonic = time.monotonic()
     received_utc_ms = int(time.time() * 1000)
     require_paired()
+    if ethernet_mode_status().get('pending'):
+        raise HTTPException(409, 'Confirm the Ethernet mode before starting detection')
     state = edge_state.read()
 
     backend_url = payload.backend_url or state.get("backend_url") or settings.edge_backend_url

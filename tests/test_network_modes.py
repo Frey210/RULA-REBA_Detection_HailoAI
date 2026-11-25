@@ -122,3 +122,11 @@ def test_confirm_requires_new_ethernet_address(edge_network, monkeypatch):
     assert client.post('/network/ethernet/confirm', headers=headers).status_code == 409
     response = client.post('http://192.168.10.80/network/ethernet/confirm', headers=headers)
     assert response.status_code == 200 and confirmed == [True]
+
+
+def test_unconfirmed_network_cannot_start_detection(edge_network, monkeypatch):
+    client, _, headers = edge_network
+    monkeypatch.setattr('edge_agent.app.ethernet_mode_status', lambda: {'pending': True, 'available': True})
+    response = client.post('/detection/start', json={'session_id': 'test', 'run_id': 'run'}, headers=headers)
+    assert response.status_code == 409
+    assert 'Confirm' in response.json()['detail']
