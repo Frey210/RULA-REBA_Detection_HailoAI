@@ -103,7 +103,7 @@ def main():
     with (ROOT / 'lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if action == 'status':
-            print(json.dumps({**read_state(), 'mode': current_mode(), 'available': True}))
+            print(json.dumps({'pending': False, **read_state(), 'mode': current_mode(), 'available': True}))
         elif action in PROFILES:
             switch(action)
         elif action == 'confirm':
