@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, HttpUrl
+from typing import Literal
 
 
 class PairingInfo(BaseModel):
@@ -50,10 +51,24 @@ class WifiConnectRequest(BaseModel):
         if not value or len(value.encode("utf-8")) > 32 or "\x00" in value:
             raise ValueError("SSID must contain 1 to 32 bytes")
         return value
-
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
         if value and not 8 <= len(value) <= 63:
             raise ValueError("Wi-Fi password must contain 8 to 63 characters")
+        return value
+
+
+class EthernetModeRequest(BaseModel):
+    mode: Literal['direct', 'site']
+
+
+class BackendReconnectRequest(BaseModel):
+    backend_url: HttpUrl
+
+    @field_validator('backend_url')
+    @classmethod
+    def validate_backend(cls, value):
+        if value.username or value.password or value.path not in {'', '/'} or value.query or value.fragment:
+            raise ValueError('Use a backend origin without credentials or path')
         return value

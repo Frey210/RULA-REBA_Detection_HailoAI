@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore unconfirmed ERGoSIGHT Ethernet changes after reboot
+After=NetworkManager.service
+Before=ergoquipt-edge-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ergosight-network-mode rollback
+
+[Install]
+WantedBy=multi-user.target

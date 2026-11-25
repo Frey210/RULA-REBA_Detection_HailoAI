@@ -82,6 +82,26 @@ If no saved Wi-Fi connects within 60 seconds, the Pi starts its setup hotspot at
 
 ## Development
 
+### Ethernet location mode (agent 0.2.4)
+
+Existing devices can install the root-owned mode helper without changing the
+active connection: `sudo bash systemd/install-network-modes.sh`. New networking
+installs include it automatically. The helper accepts only fixed actions and
+manages `ERGoSIGHT Direct LAN` / `ERGoSIGHT Site LAN` profiles on `eth0`.
+
+Use the paired desktop's Network setup to select Direct or Location (DHCP).
+Network changes are blocked during detection. Location mode disables Ethernet
+DHCP serving before activating a DHCP-client profile. Reconnect through the new
+Ethernet address and confirm within 180 seconds; otherwise a systemd timer
+restores the previous mode. Failed activation rolls back immediately; an
+unconfirmed reboot invokes the restore service before the agent. The helper
+must remain root-owned and must not import administrator-editable repository code.
+
+Authenticated `/network/reconnect` verifies the owning backend using the existing
+device credential before updating its callback address. No new pairing is
+needed for an address change. The desktop selects its local source IP using the
+OS route to each device and does not assume the router is the backend.
+
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate

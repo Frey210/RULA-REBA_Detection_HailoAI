@@ -61,5 +61,6 @@ systemctl daemon-reload
 systemctl enable dnsmasq ergoquipt-wifi-fallback.service
 systemctl restart dnsmasq ergoquipt-wifi-fallback.service
 nmcli connection up "$direct_name"
+bash "$repo/systemd/install-network-modes.sh"
 
 printf 'Hotspot SSID: %s\nHotspot password: %s\n' "$hotspot_ssid" "$hotspot_password"

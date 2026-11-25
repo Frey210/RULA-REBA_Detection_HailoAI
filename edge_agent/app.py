@@ -10,7 +10,8 @@ from fastapi.responses import StreamingResponse
 
 from edge_agent.config import settings
 from edge_agent.detection_process import detection_manager
-from edge_agent.networking import NetworkCommandError, connect_wifi, network_status, scan_wifi
+from edge_agent.networking import (NetworkCommandError, connect_wifi, network_status, scan_wifi,
+                                  change_ethernet_mode, confirm_ethernet_mode, ethernet_mode_status)
 from edge_agent.schemas import (
     DetectionStartRequest,
     DetectionStatusResponse,
@@ -18,6 +19,8 @@ from edge_agent.schemas import (
     PairingCompleteResponse,
     PairingInfo,
     WifiConnectRequest,
+    EthernetModeRequest,
+    BackendReconnectRequest,
 )
 from edge_agent.state import edge_state
 from edge_agent.streaming import mjpeg_frames, snapshot_jpeg
@@ -26,7 +29,7 @@ from edge_agent.overlay_store import write_latest_overlay
 from edge_agent.frame_store import read_frame
 from edge_agent.capture_clock import CaptureClock
 
-app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.2.0")
+app = FastAPI(title="ERGoSIGHT Edge Agent", version="0.2.4")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -100,8 +103,59 @@ def get_wifi_networks() -> dict[str, list[dict]]:
 @app.post("/network/wifi/connect", status_code=202)
 def connect_to_wifi(payload: WifiConnectRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
     require_paired()
+    if detection_manager.status().running:
+        raise HTTPException(409, 'Stop detection before changing networks')
     background_tasks.add_task(connect_wifi, payload.ssid, payload.password)
     return {"status": "connecting", "ssid": payload.ssid}
+
+
+@app.post('/network/ethernet', status_code=202)
+def set_ethernet(payload: EthernetModeRequest, background_tasks: BackgroundTasks) -> dict:
+    require_paired()
+    if detection_manager.status().running:
+        raise HTTPException(409, 'Stop detection before changing networks')
+    status = ethernet_mode_status()
+    if not status.get('available'):
+        raise HTTPException(409, 'Install the network-mode helper on this Pi first')
+    if status.get('pending'):
+        raise HTTPException(409, 'Confirm the pending network change or wait for rollback')
+    background_tasks.add_task(change_ethernet_mode, payload.mode)
+    return {'status': 'switching', 'mode': payload.mode, 'rollback_seconds': 180}
+
+
+@app.post('/network/ethernet/confirm')
+def confirm_ethernet(request: Request) -> dict:
+    require_paired()
+    status = network_status()
+    ethernet_ip = str(status['ethernet'].get('address') or '').split('/')[0]
+    server_ip = (request.scope.get('server') or ('', 0))[0]
+    if not ethernet_ip or server_ip != ethernet_ip:
+        raise HTTPException(409, 'Reconnect through the new Ethernet address before confirming')
+    try:
+        confirm_ethernet_mode()
+    except NetworkCommandError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {'status': 'confirmed'}
+
+
+@app.post('/network/reconnect')
+def reconnect_backend(payload: BackendReconnectRequest) -> dict:
+    require_paired()
+    backend = str(payload.backend_url).rstrip('/')
+    state = edge_state.read()
+    if detection_manager.status().running and backend != state.get('backend_url'):
+        raise HTTPException(409, 'Stop detection before changing the backend address')
+    try:
+        with httpx.Client(trust_env=False, timeout=5, follow_redirects=False) as client:
+            response = client.get(f'{backend}/api/v1/device-pairings/check/{settings.edge_cam_id}',
+                                  headers={'Authorization': 'Bearer ' + state['device_token']})
+            response.raise_for_status()
+            if response.json().get('device_id') != edge_state.device_id():
+                raise ValueError('Backend identity mismatch')
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        raise HTTPException(409, 'Backend verification failed. Check the owning app and firewall on port 8000.') from exc
+    edge_state.write({'backend_url': backend})
+    return {'status': 'connected', 'device_id': edge_state.device_id(), 'backend_url': backend}
 
 
 @app.post("/pairing/complete", response_model=PairingCompleteResponse)
@@ -114,7 +168,7 @@ async def complete_pairing(payload: PairingCompleteRequest) -> PairingCompleteRe
         "hostname": socket.gethostname(),
         "device_type": "raspberry_pi_5_hailo8",
         "metadata": {
-            "agent_version": "0.2.0",
+            "agent_version": "0.2.4",
             "edge_base_url": payload.edge_base_url,
             "paired_at": datetime.now(UTC).isoformat(),
         },

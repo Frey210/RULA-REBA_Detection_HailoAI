@@ -1,5 +1,7 @@
 import subprocess
 import threading
+import json
+from pathlib import Path
 from typing import Any
 
 from edge_agent.config import settings
@@ -58,8 +60,43 @@ def network_status() -> dict[str, Any]:
         "hotspot": wlan["connection"] == settings.edge_hotspot_connection,
         "hotspot_ssid": settings.edge_hotspot_ssid,
         "direct_lan_address": ethernet["address"] or settings.edge_direct_lan_address,
+        "ethernet_mode": ethernet_mode_status(),
         "provisioning": provisioning,
     }
+
+
+def _mode_command(action: str) -> str:
+    if action not in {'status', 'site', 'direct', 'confirm'}:
+        raise NetworkCommandError('Unknown network action')
+    try:
+        result = subprocess.run(['sudo', '-n', '/usr/local/sbin/ergosight-network-mode', action],
+                                capture_output=True, text=True, timeout=85)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise NetworkCommandError('Network change unavailable; check the device connection') from exc
+    if result.returncode:
+        raise NetworkCommandError('Network change failed or is already pending. Reconnect and check its status.')
+    return result.stdout.strip()
+
+
+def ethernet_mode_status() -> dict:
+    if not Path('/usr/local/sbin/ergosight-network-mode').exists():
+        return {'available': False, 'mode': 'unknown', 'pending': False}
+    try:
+        return json.loads(_mode_command('status'))
+    except (NetworkCommandError, ValueError):
+        return {'available': False, 'mode': 'unknown', 'pending': False}
+
+
+def change_ethernet_mode(mode: str) -> None:
+    try:
+        _mode_command(mode)
+    except NetworkCommandError:
+        # The root helper owns rollback even if this agent restarts or loses its socket.
+        return
+
+
+def confirm_ethernet_mode() -> None:
+    _mode_command('confirm')
 
 
 def _device_status(interface: str) -> dict[str, str | None]:
